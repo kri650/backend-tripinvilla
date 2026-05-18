@@ -1,7 +1,8 @@
 import express from 'express';
 import Enquiry from '../models/Enquiry.js';
+import Property from '../models/Property.js';
 import { protect } from '../middleware/auth.js';
-import { sendEnquiryNotification, sendOTPEmail } from '../utils/email.js';
+import { sendEnquiryNotification, sendOTPEmail, sendHostLeadAlert } from '../utils/email.js';
 
 const router = express.Router();
 
@@ -99,6 +100,31 @@ router.post('/verify-otp', async (req, res) => {
 
     // Send email notification to admin in background
     sendEnquiryNotification(newEnquiry).catch(err => console.error(err));
+
+    // Lookup the Property Owner to send Direct Lead Email & WhatsApp alerts
+    try {
+      const propName = cachedRecord.propertyName;
+      // Search for the property in database (case-insensitive)
+      const property = await Property.findOne({ name: { $regex: new RegExp(propName, 'i') } }).populate('owner');
+      
+      if (property && property.owner) {
+        const ownerEmail = property.owner.email;
+        const ownerName = property.owner.name;
+        const ownerPhone = property.owner.phone || 'N/A';
+
+        // 1. Send Email alert directly to the Host/Owner with direct WhatsApp deep-link!
+        sendHostLeadAlert(ownerEmail, ownerName, cachedRecord.name, cachedRecord.phone || 'N/A', key, propName).catch(err => console.error(err));
+
+        // 2. Simulated WhatsApp Notification Trigger
+        console.log('\n=========================================');
+        console.log('📱 SIMULATED WHATSAPP NOTIFICATION TRIGGERED');
+        console.log(`TO OWNER (${ownerName} - ${ownerPhone})`);
+        console.log(`MESSAGE: "Hi ${ownerName}, a user named ${cachedRecord.name} (${cachedRecord.phone}) has unlocked your contact number for property '${propName}'. Standby for a call!"`);
+        console.log('=========================================\n');
+      }
+    } catch (ownerAlertErr) {
+      console.error('Failed to dispatch host lead alert:', ownerAlertErr);
+    }
 
     // Clear the used OTP cache
     activeOTPs.delete(key);
