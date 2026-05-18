@@ -3,6 +3,7 @@ import Enquiry from '../models/Enquiry.js';
 import Property from '../models/Property.js';
 import { protect } from '../middleware/auth.js';
 import { sendEnquiryNotification, sendOTPEmail, sendHostLeadAlert } from '../utils/email.js';
+import { sendSMSOTP } from '../utils/sms.js';
 
 const router = express.Router();
 
@@ -31,13 +32,13 @@ router.post('/', async (req, res) => {
   }
 });
 
-// POST /api/enquiries/send-otp (Send real OTP code to user's email)
+// POST /api/enquiries/send-otp (Send secure OTP code via SMS / Fast2SMS with Email fallback)
 router.post('/send-otp', async (req, res) => {
   try {
     const { email, name, phone, propertyName } = req.body;
     
-    if (!email || !name) {
-      return res.status(400).json({ success: false, message: 'Name and Email are required to request OTP.' });
+    if (!email || !name || !phone) {
+      return res.status(400).json({ success: false, message: 'Name, Email, and Phone Number are required to request OTP.' });
     }
 
     // Generate random 6-digit OTP code
@@ -52,13 +53,36 @@ router.post('/send-otp', async (req, res) => {
       expiresAt: Date.now() + 5 * 60 * 1000 // 5 minutes
     });
 
-    // Send the email with the OTP code
-    await sendOTPEmail(email, name, otpCode, propertyName);
+    let sentViaSMS = false;
 
-    res.json({ success: true, message: 'A 6-digit secure code has been sent to your email.' });
+    // 1. Try sending via Fast2SMS if API key is present
+    if (process.env.FAST2SMS_API_KEY) {
+      try {
+        const smsResult = await sendSMSOTP(phone, otpCode);
+        if (smsResult.success) {
+          sentViaSMS = true;
+          console.log(`[OTP] Successfully sent OTP SMS to guest: ${phone}`);
+        }
+      } catch (smsErr) {
+        console.error('[OTP] Fast2SMS dispatch failed, attempting email fallback:', smsErr);
+      }
+    }
+
+    // 2. Fall back to Email if SMS failed or Fast2SMS is not configured
+    if (!sentViaSMS) {
+      console.log('[OTP] Sending OTP via Email fallback...');
+      await sendOTPEmail(email, name, otpCode, propertyName);
+    }
+
+    res.json({ 
+      success: true, 
+      message: sentViaSMS 
+        ? `A 6-digit secure code has been sent directly to your phone number via SMS.` 
+        : `A 6-digit secure verification code has been sent to your email address.` 
+    });
   } catch (err) {
     console.error('Send OTP Endpoint Error:', err);
-    res.status(500).json({ success: false, message: 'Failed to send OTP code. Please try again.' });
+    res.status(500).json({ success: false, message: 'Failed to dispatch verification code. Please check your credentials.' });
   }
 });
 
