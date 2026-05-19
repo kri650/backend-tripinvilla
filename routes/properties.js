@@ -144,22 +144,9 @@ router.get('/top', async (req, res) => {
   }
 });
 
-// GET single property
-router.get('/:id', async (req, res) => {
-  try {
-    const property = await Property.findById(req.params.id);
-    if (!property) return res.status(404).json({ message: 'Property not found' });
-    res.json(property);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
 import upload from '../middleware/upload.js';
 
-// ... (other routes)
-
-// POST upload images
+// POST upload images — MUST be before /:id to avoid being caught by it
 router.post('/upload', upload.array('images', 10), (req, res) => {
   try {
     const filePaths = req.files.map(file => file.filename.startsWith('http') ? file.filename : `/uploads/${file.filename}`);
@@ -169,7 +156,7 @@ router.post('/upload', upload.array('images', 10), (req, res) => {
   }
 });
 
-// GET /api/properties/owner -> Fetch owner's property list
+// GET /api/properties/owner -> Fetch owner's property list — MUST be before /:id
 router.get('/owner', protect, ownerOnly, async (req, res) => {
   try {
     const properties = await Property.find({ owner: req.user._id }).sort({ createdAt: -1 });
@@ -185,6 +172,17 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
       };
     });
     res.json(formatted);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET single property — /:id MUST come AFTER all named routes
+router.get('/:id', async (req, res) => {
+  try {
+    const property = await Property.findById(req.params.id);
+    if (!property) return res.status(404).json({ message: 'Property not found' });
+    res.json(property);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -306,7 +304,7 @@ router.delete('/:id', protect, ownerOnly, async (req, res) => {
   }
 });
 
-// POST /api/properties/ai-search  — Natural language search using Gemini
+// POST /api/properties/ai-search — Natural language search using Gemini — BEFORE /:id
 router.post('/ai-search', async (req, res) => {
   try {
     const { query } = req.body;
