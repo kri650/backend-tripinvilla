@@ -1,35 +1,159 @@
 import express from 'express';
 import Enquiry from '../models/Enquiry.js';
 import Property from '../models/Property.js';
-import OTP from '../models/OTP.js'; // Import MongoDB OTP Cache Model
-import { protect } from '../middleware/auth.js';
+import OTP from '../models/OTP.js';
+import { protect, ownerOnly } from '../middleware/auth.js';
 import { sendEnquiryNotification, sendOTPEmail, sendHostLeadAlert } from '../utils/email.js';
 import { sendSMSOTP } from '../utils/sms.js';
 import { sendWhatsAppText } from '../utils/whatsapp.js';
 
 const router = express.Router();
 
-// GET all enquiries (for travelers, show only theirs; for admin, show all)
+// GET owner's inbox (all enquiries matching owner's properties)
+// GET /api/enquiries/owner
+router.get('/owner', protect, ownerOnly, async (req, res) => {
+  try {
+    const properties = await Property.find({ owner: req.user._id }).select('_id');
+    const propertyIds = properties.map(p => p._id);
+
+    const enquiries = await Enquiry.find({ property_id: { $in: propertyIds } })
+      .populate('property_id', 'name location city type')
+      .sort({ createdAt: -1 });
+
+    const formatted = enquiries.map((e, idx) => {
+      const obj = e.toObject();
+      return {
+        ...obj,
+        id: e._id,
+        enquiryNo: `ENQ-${4000 + enquiries.length - idx}`,
+        createdAt: e.createdAt,
+        user_name: e.user_name || e.name || 'Guest',
+        phone: e.phone || 'N/A',
+        email: e.email,
+        query: e.query || e.message || '',
+        propertyName: e.property_id?.name || e.propertyName || 'Property'
+      };
+    });
+
+    res.json(formatted);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET owner's enquiries with filter options
+// GET /api/enquiries/owner/filter
+router.get('/owner/filter', protect, ownerOnly, async (req, res) => {
+  try {
+    const { date_from, date_to, property_type, location, search } = req.query;
+
+    const propertyFilter = { owner: req.user._id };
+    if (property_type) {
+      propertyFilter.type = property_type;
+    }
+    if (location) {
+      propertyFilter.$or = [
+        { location: { $regex: location, $options: 'i' } },
+        { city: { $regex: location, $options: 'i' } }
+      ];
+    }
+
+    const properties = await Property.find(propertyFilter).select('_id');
+    const propertyIds = properties.map(p => p._id);
+
+    const enquiryFilter = { property_id: { $in: propertyIds } };
+
+    if (date_from || date_to) {
+      enquiryFilter.createdAt = {};
+      if (date_from) {
+        enquiryFilter.createdAt.$gte = new Date(date_from);
+      }
+      if (date_to) {
+        const dateToObj = new Date(date_to);
+        dateToObj.setHours(23, 59, 59, 999);
+        enquiryFilter.createdAt.$lte = dateToObj;
+      }
+    }
+
+    if (search) {
+      enquiryFilter.$or = [
+        { user_name: { $regex: search, $options: 'i' } },
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { query: { $regex: search, $options: 'i' } },
+        { message: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const enquiries = await Enquiry.find(enquiryFilter)
+      .populate('property_id', 'name location city type')
+      .sort({ createdAt: -1 });
+
+    const formatted = enquiries.map((e, idx) => {
+      const obj = e.toObject();
+      return {
+        ...obj,
+        id: e._id,
+        enquiryNo: `ENQ-${4000 + enquiries.length - idx}`,
+        createdAt: e.createdAt,
+        user_name: e.user_name || e.name || 'Guest',
+        phone: e.phone || 'N/A',
+        email: e.email,
+        query: e.query || e.message || '',
+        propertyName: e.property_id?.name || e.propertyName || 'Property'
+      };
+    });
+
+    res.json(formatted);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET all enquiries (legacy support)
 router.get('/', protect, async (req, res) => {
   try {
     let query = {};
     if (req.user.role !== 'admin') {
       query.email = req.user.email;
     }
-    const enquiries = await Enquiry.find(query).populate('property', 'name location').sort({ createdAt: -1 }).limit(50);
+    const enquiries = await Enquiry.find(query).populate('property_id', 'name location').sort({ createdAt: -1 }).limit(50);
     res.json(enquiries);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// CREATE direct enquiry
+// CREATE direct enquiry (Public - no auth)
 router.post('/', async (req, res) => {
   try {
-    const enquiry = await Enquiry.create(req.body);
-    // Send email notification in background
-    sendEnquiryNotification(enquiry).catch(err => console.error(err));
-    res.status(201).json(enquiry);
+    const { property_id, user_id, user_name, phone, email, query, message, name, property } = req.body;
+    
+    const propId = property_id || property;
+    const uName = user_name || name || 'Guest';
+    const qText = query || message || 'No message provided';
+
+    const pDoc = await Property.findById(propId);
+    if (!pDoc) return res.status(404).json({ message: 'Property not found' });
+
+    const newEnquiry = await Enquiry.create({
+      property_id: propId,
+      user_id: user_id || null,
+      user_name: uName,
+      phone: phone || 'N/A',
+      email: email,
+      query: qText,
+      
+      // Compatibility fields
+      property: propId,
+      name: uName,
+      message: qText,
+      propertyName: pDoc.name,
+      status: 'Open'
+    });
+
+    sendEnquiryNotification(newEnquiry).catch(err => console.error(err));
+    res.status(201).json(newEnquiry);
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
@@ -45,11 +169,8 @@ router.post('/send-otp', async (req, res) => {
     }
 
     const key = email.toLowerCase().trim();
-
-    // Generate random 6-digit OTP code
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Upsert the OTP document in MongoDB (expires in 5 minutes via native TTL index)
     await OTP.findOneAndUpdate(
       { email: key },
       { 
@@ -57,14 +178,13 @@ router.post('/send-otp', async (req, res) => {
         name,
         phone,
         propertyName,
-        createdAt: new Date() // Reset the expiration timer clock
+        createdAt: new Date()
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
     let sentViaSMS = false;
 
-    // 1. Try sending via Fast2SMS if API key is present
     if (process.env.FAST2SMS_API_KEY) {
       try {
         const smsResult = await sendSMSOTP(phone, otpCode);
@@ -77,7 +197,6 @@ router.post('/send-otp', async (req, res) => {
       }
     }
 
-    // 2. Fall back to Email if SMS failed or Fast2SMS is not configured
     if (!sentViaSMS) {
       console.log('[OTP] Sending OTP via Email fallback...');
       await sendOTPEmail(email, name, otpCode, propertyName);
@@ -105,8 +224,6 @@ router.post('/verify-otp', async (req, res) => {
     }
 
     const key = email.toLowerCase().trim();
-    
-    // Fetch active verification record from MongoDB
     const dbRecord = await OTP.findOne({ email: key });
 
     if (!dbRecord) {
@@ -118,23 +235,24 @@ router.post('/verify-otp', async (req, res) => {
     }
 
     const propName = dbRecord.propertyName || 'Kasol Stay';
-
-    // Try to resolve the property to attach it to the enquiry (for owner dashboards)
     const property = await Property.findOne({ name: { $regex: new RegExp(propName, 'i') } }).populate('owner');
 
-    // OTP is valid! Automatically create the enquiry in the database
     const enquiryData = {
-      name: dbRecord.name,
+      property_id: property?._id || new mongoose.Types.ObjectId(),
+      user_name: dbRecord.name,
       email: key,
       phone: dbRecord.phone || 'N/A',
+      query: `Verified OTP request for host contact number on property: ${propName}`,
+
+      // Compatibility fields
       property: property?._id,
+      name: dbRecord.name,
+      message: `Verified OTP request for host contact number on property: ${propName}`,
       propertyName: property?.name || propName,
-      message: `Verified OTP request for host contact number on property: ${propName}`
+      status: 'Open'
     };
 
     const newEnquiry = await Enquiry.create(enquiryData);
-
-    // Send email notification to admin in background
     sendEnquiryNotification(newEnquiry).catch(err => console.error(err));
 
     try {
@@ -143,10 +261,8 @@ router.post('/verify-otp', async (req, res) => {
         const ownerName = property.owner.name;
         const ownerPhone = property.owner.phone || 'N/A';
 
-        // 1. Send Email alert directly to the Host/Owner with direct WhatsApp deep-link!
         sendHostLeadAlert(ownerEmail, ownerName, dbRecord.name, dbRecord.phone || 'N/A', key, propName).catch(err => console.error(err));
 
-        // 2. Real WhatsApp notification (Cloud API) if configured, else simulated log
         const waMessage =
           `Hi ${ownerName}, a user named ${dbRecord.name} (${dbRecord.phone || 'N/A'}) ` +
           `has unlocked your contact number for property '${propName}'. ` +
@@ -169,9 +285,7 @@ router.post('/verify-otp', async (req, res) => {
       console.error('Failed to dispatch host lead alert:', ownerAlertErr);
     }
 
-    // Clear the used OTP cache in MongoDB
     await OTP.deleteOne({ email: key });
-
     res.json({ success: true, message: 'Verification successful!', enquiry: newEnquiry });
   } catch (err) {
     console.error('Verify OTP Endpoint Error:', err);
