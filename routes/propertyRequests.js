@@ -7,7 +7,7 @@ const router = express.Router();
 
 // GET all property requests (Admin View)
 // GET /api/property-requests
-router.get('/', protect, adminOnly, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const requestsDb = await PropertyRequest.find()
       .populate('property', 'name location city type')
@@ -29,7 +29,7 @@ router.get('/', protect, adminOnly, async (req, res) => {
       ownerName: r.ownerName,
       ownerContact: r.ownerContact,
       priceByOwner: r.price_per_room || r.priceByOwner,
-      status: r.admin_status || 'pending',
+      status: r.admin_status === 'approved' ? 'Accepted' : (r.admin_status === 'rejected' ? 'Rejected' : 'NotAccepted'),
       createdAt: r.createdAt
     }));
 
@@ -41,6 +41,50 @@ router.get('/', protect, adminOnly, async (req, res) => {
         rejectedRequests
       }
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PUT /api/property-requests/:id/accept -> Approve request (Admin View)
+router.put('/:id/accept', async (req, res) => {
+  try {
+    const request = await PropertyRequest.findById(req.params.id);
+    if (!request) return res.status(404).json({ message: 'Property request not found' });
+    
+    request.admin_status = 'approved';
+    request.status = 'Accepted';
+    await request.save();
+    
+    // Update the property status to Active
+    if (request.property || request.property_id) {
+      const propId = request.property || request.property_id;
+      await Property.findByIdAndUpdate(propId, { status: 'Active' });
+    }
+    
+    res.json(request);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PUT /api/property-requests/:id/reject -> Reject request (Admin View)
+router.put('/:id/reject', async (req, res) => {
+  try {
+    const request = await PropertyRequest.findById(req.params.id);
+    if (!request) return res.status(404).json({ message: 'Property request not found' });
+    
+    request.admin_status = 'rejected';
+    request.status = 'Rejected';
+    await request.save();
+    
+    // Update the property status to Inactive Admin
+    if (request.property || request.property_id) {
+      const propId = request.property || request.property_id;
+      await Property.findByIdAndUpdate(propId, { status: 'Inactive Admin' });
+    }
+    
+    res.json(request);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
