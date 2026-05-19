@@ -8,36 +8,43 @@ const router = express.Router();
 router.get('/profile', protect, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('-password').populate('wishlist');
-    if (!user) {
-      throw new Error('User not found in DB');
-    }
+    if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
   } catch (err) {
-    // Fallback Mock profile
-    res.json(req.user);
+    res.status(500).json({ message: err.message });
   }
 });
 
 // UPDATE user profile
 router.put('/profile', protect, async (req, res) => {
   try {
-    const { name, email, phone, avatar } = req.body;
+    const { name, email, phone, avatar, company, pan, bank, accountNum, ifsc, address, city, state, pincode, citizenship, residence, emergencyName, emergencyPhone, emergencyEmail } = req.body;
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    if (name) user.name = name;
-    if (email) user.email = email;
-    if (phone) user.phone = phone;
-    if (avatar) user.avatar = avatar;
+    if (name !== undefined) user.name = name;
+    if (email !== undefined) user.email = email;
+    if (phone !== undefined) user.phone = phone;
+    if (avatar !== undefined) user.avatar = avatar;
+    if (company !== undefined) user.company = company;
+    if (pan !== undefined) user.pan = pan;
+    if (bank !== undefined) user.bank = bank;
+    if (accountNum !== undefined) user.accountNum = accountNum;
+    if (ifsc !== undefined) user.ifsc = ifsc;
+    if (address !== undefined) user.address = address;
+    if (city !== undefined) user.city = city;
+    if (state !== undefined) user.state = state;
+    if (pincode !== undefined) user.pincode = pincode;
+    if (citizenship !== undefined) user.citizenship = citizenship;
+    if (residence !== undefined) user.residence = residence;
+    if (emergencyName !== undefined) user.emergencyName = emergencyName;
+    if (emergencyPhone !== undefined) user.emergencyPhone = emergencyPhone;
+    if (emergencyEmail !== undefined) user.emergencyEmail = emergencyEmail;
 
     await user.save();
-    res.json({ id: user._id, name: user.name, email: user.email, phone: user.phone, role: user.role, avatar: user.avatar });
+    res.json(user);
   } catch (err) {
-    // Graceful offline mock update fallback
-    res.json({
-      ...req.user,
-      ...req.body
-    });
+    res.status(500).json({ message: err.message });
   }
 });
 

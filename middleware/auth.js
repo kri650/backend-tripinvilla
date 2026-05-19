@@ -3,57 +3,29 @@ import User from '../models/User.js';
 import mongoose from 'mongoose';
 
 export const protect = async (req, res, next) => {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : null;
+
+  if (!token) {
+    return res.status(401).json({ message: 'Not authorized: missing token' });
+  }
+
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    
-    // Development/Offline Fallback Bypass
-    if (!token || mongoose.connection.readyState !== 1) {
-      req.user = {
-        _id: 'mock_owner_id_123',
-        id: 'mock_owner_id_123',
-        name: 'Navin Kumar',
-        email: 'navin@gmail.com',
-        role: 'owner',
-        phone: '+91 99887 76543',
-        company: 'NK Premium Rentals Ltd',
-        pan: 'ABCDE1234F',
-        bank: 'HDFC Bank Ltd',
-        accountNum: '501002938475',
-        ifsc: 'HDFC0000124',
-        address: 'Flat 402, Green Meadows Apartment, Phase 2',
-        city: 'Bangalore',
-        state: 'Karnataka',
-        pincode: '560037'
-      };
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // If DB is connected, resolve the full user (required for role checks and profile data)
+    if (mongoose.connection.readyState === 1) {
+      const user = await User.findById(decoded.id).select('-password');
+      if (!user) return res.status(401).json({ message: 'Not authorized: user not found' });
+      req.user = user;
       return next();
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select('-password');
-    if (!req.user) {
-      req.user = { _id: decoded.id, role: 'owner', name: 'Navin Kumar' };
-    }
-    next();
+    // DB offline: still allow token-authenticated access where possible
+    req.user = { _id: decoded.id, id: decoded.id, role: decoded.role };
+    return next();
   } catch (err) {
-    // Fallback in case of verification or DB errors
-    req.user = {
-      _id: 'mock_owner_id_123',
-      id: 'mock_owner_id_123',
-      name: 'Navin Kumar',
-      email: 'navin@gmail.com',
-      role: 'owner',
-      phone: '+91 99887 76543',
-      company: 'NK Premium Rentals Ltd',
-      pan: 'ABCDE1234F',
-      bank: 'HDFC Bank Ltd',
-      accountNum: '501002938475',
-      ifsc: 'HDFC0000124',
-      address: 'Flat 402, Green Meadows Apartment, Phase 2',
-      city: 'Bangalore',
-      state: 'Karnataka',
-      pincode: '560037'
-    };
-    next();
+    return res.status(401).json({ message: 'Not authorized: invalid token' });
   }
 };
 

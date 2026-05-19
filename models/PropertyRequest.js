@@ -1,15 +1,28 @@
 import mongoose from 'mongoose';
 
 const propertyRequestSchema = new mongoose.Schema({
-  requestNo: { type: String, required: true },
+  requestNo: { type: String },
   image: { type: String },
-  propertyName: { type: String, required: true },
-  location: { type: String, required: true },
-  category: { type: String, required: true },
-  ownerName: { type: String, required: true },
-  ownerContact: { type: String, required: true },
-  priceByOwner: { type: Number, required: true },
-  status: { type: String, enum: ['NotAccepted', 'Accepted', 'Rejected'], default: 'NotAccepted' },
+  propertyName: { type: String },
+  location: { type: String },
+  ownerName: { type: String },
+  ownerContact: { type: String },
+  priceByOwner: { type: Number },
+  status: { type: String, enum: ['NotAccepted', 'Accepted', 'Rejected', 'pending', 'approved', 'rejected'], default: 'pending' },
+  property: { type: mongoose.Schema.Types.ObjectId, ref: 'Property' },
+  
+  // New fields
+  property_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Property' },
+  category: { type: String },
+  room_type: { type: String },
+  bed_type: { type: String },
+  amenities_types: [{ type: String }],
+  price_per_room: { type: Number },
+  checkin_time: { type: String },
+  checkout_time: { type: String },
+  offer_percent: { type: String },
+  rules: { type: String },
+  admin_status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' }
 }, { timestamps: true });
 
 export default mongoose.model('PropertyRequest', propertyRequestSchema);

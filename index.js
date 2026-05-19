@@ -33,14 +33,24 @@ app.use(express.urlencoded({ extended: true }));
 import { seedDatabase } from './utils/seeder.js';
 
 mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/tripinvilla', {
-  serverSelectionTimeoutMS: 1000,
+  serverSelectionTimeoutMS: 5000,
   bufferCommands: false
 })
   .then(() => {
     console.log('✅ MongoDB connected');
-    seedDatabase().catch(err => console.error('❌ Seeding error:', err));
+    const shouldSeed =
+      process.env.SEED_DB === 'true' ||
+      (process.env.NODE_ENV === 'development' && process.env.SEED_DB !== 'false');
+    if (shouldSeed) {
+      seedDatabase().catch(err => console.error('❌ Seeding error:', err));
+    }
   })
-  .catch(err => console.error('❌ MongoDB error (running in mock mode):', err.message));
+  .catch(err => {
+    console.error('❌ MongoDB connection failed:', err.message);
+    console.error('➡️  Start MongoDB locally (27017) or set MONGO_URI in server/.env');
+    console.error('➡️  If using Docker: docker compose up -d');
+    console.error('➡️  Health check: GET http://localhost:5000/api/health');
+  });
 
 // Routes
 import authRoutes from './routes/auth.js';
@@ -83,6 +93,10 @@ app.use('/api/master/countries', countryMasterRoutes);
 app.use('/api/master/states', stateMasterRoutes);
 app.use('/api/master/cities', cityMasterRoutes);
 app.use('/api/master/locations', locationMasterRoutes);
+// Back-compat aliases (some clients use /api/master/*)
+app.use('/api/master/destinations', destinationMasterRoutes);
+app.use('/api/master/experiences', experienceMasterRoutes);
+app.use('/api/master/amenities', amenitiesMasterRoutes);
 app.use('/api/masters/destinations', destinationMasterRoutes);
 app.use('/api/masters/experiences', experienceMasterRoutes);
 app.use('/api/masters/amenities', amenitiesMasterRoutes);

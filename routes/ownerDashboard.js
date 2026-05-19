@@ -49,43 +49,20 @@ router.get('/stats', async (req, res) => {
       }
     });
   } catch (err) {
-    // Fallback Mock Data when DB is offline
-    res.json({
-      totalProperties: 3,
-      activeProperties: 2,
-      totalEnquiries: 12,
-      totalRevenue: 284000,
-      totalBookings: 18,
-      occupancyRate: 85,
-      compareYesterday: {
-        enquiries: "+2.5",
-        revenue: "+12.4",
-        occupancy: "+5.2"
-      }
-    });
+    res.status(500).json({ message: err.message });
   }
 });
 
-// 2. Properties for Owner
 // GET /api/owner-dashboard/properties
 router.get('/properties', async (req, res) => {
   try {
     const properties = await Property.find({ owner: req.user._id }).sort({ createdAt: -1 });
-    if (properties.length === 0) {
-      throw new Error('No properties found');
-    }
     res.json(properties);
   } catch (err) {
-    // Fallback Mock Data when DB is offline
-    res.json([
-      { _id: "mock_p1", propertyNo: "PR-1001", propertyName: "Whispering Palms Villa", location: "Anjuna, Goa", type: "Villa", price: 12500, bedRooms: 4, capacity: 8, rating: 4.9, status: "Active" },
-      { _id: "mock_p2", propertyNo: "PR-1002", propertyName: "Himalayan Woodhouse", location: "Kasol, HP", type: "Homestay", price: 3500, bedRooms: 2, capacity: 4, rating: 4.8, status: "Active" },
-      { _id: "mock_p3", propertyNo: "PR-1003", propertyName: "Royal Palm Resort", location: "Udaipur, RJ", type: "Resort", price: 8500, bedRooms: 1, capacity: 2, rating: 4.7, status: "Inactive Admin" }
-    ]);
+    res.status(500).json({ message: err.message });
   }
 });
 
-// 3. Enquiries for Owner's Properties
 // GET /api/owner-dashboard/enquiries
 router.get('/enquiries', async (req, res) => {
   try {
@@ -95,15 +72,10 @@ router.get('/enquiries', async (req, res) => {
       .sort({ createdAt: -1 });
     res.json(enquiries);
   } catch (err) {
-    // Fallback Mock Data when DB is offline
-    res.json([
-      { _id: "mock_e1", property: { name: "Whispering Palms Villa", location: "Anjuna, Goa" }, name: "Aarav Mehta", email: "aarav@gmail.com", phone: "+91 9876543210", message: "Is the pool private and exclusive for guests?", createdAt: new Date() },
-      { _id: "mock_e2", property: { name: "Himalayan Woodhouse", location: "Kasol, HP" }, name: "Sanya Malhotra", email: "sanya@gmail.com", phone: "+91 9988776655", message: "Do you provide heaters in rooms?", createdAt: new Date() }
-    ]);
+    res.status(500).json({ message: err.message });
   }
 });
 
-// 4. Offers for Owner's Properties
 // GET /api/owner-dashboard/offers
 router.get('/offers', async (req, res) => {
   try {
@@ -111,12 +83,14 @@ router.get('/offers', async (req, res) => {
     const offers = await Offer.find({ propertyId: { $in: propertyIds } })
       .populate('propertyId', 'name location city')
       .sort({ createdAt: -1 });
-    res.json(offers);
+    const today = new Date();
+    const formatted = offers.map((o) => ({
+      ...o.toObject(),
+      status: o.dateTo && new Date(o.dateTo) < today ? 'Expired' : (o.status || 'Active')
+    }));
+    res.json(formatted);
   } catch (err) {
-    // Fallback Mock Data when DB is offline
-    res.json([
-      { _id: "mock_o1", propertyId: { name: "Whispering Palms Villa", location: "Anjuna, Goa" }, discount: 20, startDate: new Date(), endDate: new Date(Date.now() + 86400000 * 7), code: "SUMMER20" }
-    ]);
+    res.status(500).json({ message: err.message });
   }
 });
 
@@ -131,6 +105,21 @@ router.put('/properties/:id', async (req, res) => {
     res.json(property);
   } catch (err) {
     res.json({ _id: req.params.id, ...req.body, message: 'Mock property updated' });
+  }
+});
+
+// 5. Bookings for Owner's Properties
+// GET /api/owner-dashboard/bookings
+router.get('/bookings', async (req, res) => {
+  try {
+    const propertyIds = (await Property.find({ owner: req.user._id }).select('_id')).map(p => p._id);
+    const bookings = await Booking.find({ property: { $in: propertyIds } })
+      .populate('property')
+      .populate('user', 'name email phone')
+      .sort({ createdAt: -1 });
+    res.json(bookings);
+  } catch (err) {
+    res.json([]);
   }
 });
 

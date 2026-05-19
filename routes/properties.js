@@ -1,12 +1,13 @@
 import express from 'express';
 import Property from '../models/Property.js';
+import PropertyRequest from '../models/PropertyRequest.js';
 import { protect, ownerOnly } from '../middleware/auth.js';
 
 const router = express.Router();
 
 const mockPropertiesList = [
-  { _id: "mock1", propertyNo: "PR-1001", image: "https://images.unsplash.com/photo-1580587722351-9d9b788c0784?w=500&auto=format&fit=crop&q=60", propertyName: "Whispering Palms Villa", location: "Goa, India", category: "Villa", bestRoomRate: 4500, rooms: 4, rating: 4.9, status: "Active", createdAt: new Date() },
-  { _id: "mock2", propertyNo: "PR-1002", image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60", propertyName: "Bodhi Serenity Homestay", location: "Manali, HP", category: "Homestay", bestRoomRate: 2200, rooms: 6, rating: 4.8, status: "Active", createdAt: new Date() },
+  { _id: "mock1", propertyNo: "PR-1001", image: "https://images.unsplash.com/photo-1580587722351-9d9b788c0784?w=500&auto=format&fit=crop&q=60", propertyName: "Whispering Palms Villa", location: "Goa, India", category: "Villa", bestRoomRate: 4500, rooms: 4, rating: 4.9, status: "Active", hasActiveOffer: true, createdAt: new Date() },
+  { _id: "mock2", propertyNo: "PR-1002", image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60", propertyName: "Bodhi Serenity Homestay", location: "Manali, HP", category: "Homestay", bestRoomRate: 2200, rooms: 6, rating: 4.8, status: "Active", hasActiveOffer: false, createdAt: new Date() },
   { _id: "mock3", propertyNo: "PR-1003", image: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=500&auto=format&fit=crop&q=60", propertyName: "Royal Palm Resort", location: "Udaipur, RJ", category: "Resort", bestRoomRate: 8500, rooms: 24, rating: 4.7, status: "Inactive Admin", createdAt: new Date() },
   { _id: "mock4", propertyNo: "PR-1004", image: "https://images.unsplash.com/photo-1613977257363-707ba9348227?w=500&auto=format&fit=crop&q=60", propertyName: "Oasis Luxury Apartments", location: "Bangalore, KA", category: "Apartment", bestRoomRate: 3500, rooms: 2, rating: 4.6, status: "Active", createdAt: new Date() },
   { _id: "mock5", propertyNo: "PR-1005", image: "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=500&auto=format&fit=crop&q=60", propertyName: "Meadow View Cottage", location: "Ooty, TN", category: "Cottage", bestRoomRate: 2800, rooms: 3, rating: 4.9, status: "Inactive Admin", createdAt: new Date() }
@@ -43,6 +44,7 @@ const filterMockProperties = (list, query) => {
     result = result.filter(p => p.guests >= Number(guests));
   }
 
+  result.sort((a, b) => (b.hasActiveOffer === true ? 1 : 0) - (a.hasActiveOffer === true ? 1 : 0));
   return result;
 };
 
@@ -51,7 +53,7 @@ const filterMockProperties = (list, query) => {
 router.get('/', async (req, res) => {
   try {
     const { status, type, city, search, date, minPrice, maxPrice, guests, limit = 50, page = 1 } = req.query;
-    const filter = {};
+    const filter = { status: 'Active' };
 
     if (status) filter.status = status;
     if (type) filter.type = type;
@@ -60,7 +62,10 @@ router.get('/', async (req, res) => {
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
         { location: { $regex: search, $options: 'i' } },
-        { city: { $regex: search, $options: 'i' } }
+        { city: { $regex: search, $options: 'i' } },
+        { state: { $regex: search, $options: 'i' } },
+        { type: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
       ];
     }
     
@@ -87,7 +92,7 @@ router.get('/', async (req, res) => {
     const propertiesDb = await Property.find(filter)
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit))
-      .sort({ createdAt: -1 });
+      .sort({ hasActiveOffer: -1, createdAt: -1 });
 
     const total = await Property.countDocuments(filter);
 
@@ -109,43 +114,33 @@ router.get('/', async (req, res) => {
       guests: p.capacity || 2,
       rating: p.rating || 4.5,
       status: p.status || 'Active',
+      hasActiveOffer: p.hasActiveOffer || false,
       createdAt: p.createdAt
     }));
-
-    if (formattedProperties.length === 0) {
-      formattedProperties = filterMockProperties(mockPropertiesList, req.query);
-    }
 
     res.json({
       properties: formattedProperties,
       stats: {
-        totalProperties: totalProperties > 0 ? totalProperties : 125,
-        activeProperties: activeProperties > 0 ? activeProperties : 98,
-        inactiveAdmin: inactiveAdmin > 0 ? inactiveAdmin : 12
+        totalProperties,
+        activeProperties,
+        inactiveAdmin
       },
-      total: total > 0 ? total : formattedProperties.length,
+      total: total,
       page: Number(page),
-      pages: Math.ceil((total > 0 ? total : formattedProperties.length) / limit)
+      pages: Math.ceil(total / limit)
     });
   } catch (err) {
-    const fallbackList = filterMockProperties(mockPropertiesList, req.query);
-    res.json({
-      properties: fallbackList,
-      stats: { totalProperties: 125, activeProperties: 98, inactiveAdmin: 12 },
-      total: fallbackList.length,
-      page: 1,
-      pages: 1
-    });
+    res.status(500).json({ message: err.message });
   }
 });
 
 // GET top 10 by bookings
 router.get('/top', async (req, res) => {
   try {
-    const properties = await Property.find().sort({ totalBookings: -1 }).limit(10);
+    const properties = await Property.find({ status: 'Active' }).sort({ totalBookings: -1 }).limit(10);
     res.json(properties);
   } catch (err) {
-    res.json(mockPropertiesList);
+    res.status(500).json({ message: err.message });
   }
 });
 
@@ -156,7 +151,7 @@ router.get('/:id', async (req, res) => {
     if (!property) return res.status(404).json({ message: 'Property not found' });
     res.json(property);
   } catch (err) {
-    res.json(mockPropertiesList[0]);
+    res.status(500).json({ message: err.message });
   }
 });
 
@@ -174,60 +169,268 @@ router.post('/upload', upload.array('images', 10), (req, res) => {
   }
 });
 
+// GET /api/properties/owner -> Fetch owner's property list
+router.get('/owner', protect, ownerOnly, async (req, res) => {
+  try {
+    const properties = await Property.find({ owner: req.user._id }).sort({ createdAt: -1 });
+    const formatted = properties.map(p => {
+      const obj = p.toObject();
+      return {
+        ...obj,
+        id: p._id,
+        owner_id: p.owner,
+        bedrooms: p.bedRooms,
+        address: p.location,
+        price_per_night: p.price
+      };
+    });
+    res.json(formatted);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST create
 router.post('/', protect, ownerOnly, async (req, res) => {
   try {
     const count = await Property.countDocuments();
+    
+    // Map input fields for compatibility
+    const body = { ...req.body };
+    if (body.price_per_night !== undefined) body.price = Number(body.price_per_night);
+    if (body.bedrooms !== undefined) body.bedRooms = Number(body.bedrooms);
+    if (body.address !== undefined) body.location = body.address;
+
     const propertyData = {
       propertyNo: `PR-${1000 + count + 1}`,
       owner: req.user._id,
-      ...req.body
+      status: body.status || 'Active',
+      ...body
     };
     const property = await Property.create(propertyData);
-    res.status(201).json(property);
+
+    // Create a property request for admin approval
+    const requestCount = await PropertyRequest.countDocuments();
+    await PropertyRequest.create({
+      requestNo: `REQ-${3000 + requestCount + 1}`,
+      image: property.images && property.images.length > 0 ? property.images[0] : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60',
+      propertyName: property.name,
+      location: property.location,
+      category: property.type,
+      ownerName: req.user.name,
+      ownerContact: req.user.phone || req.user.email || 'N/A',
+      priceByOwner: property.price,
+      property: property._id,
+      status: 'NotAccepted'
+    });
+
+    const responseObj = property.toObject();
+    res.status(201).json({
+      ...responseObj,
+      id: property._id,
+      owner_id: property.owner,
+      bedrooms: property.bedRooms,
+      address: property.location,
+      price_per_night: property.price
+    });
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
 });
 
 // PUT update
-router.put('/:id', async (req, res) => {
+router.put('/:id', protect, ownerOnly, async (req, res) => {
   try {
-    const property = await Property.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
-    if (!property) return res.json({ _id: req.params.id, ...req.body, message: 'Mock property updated' });
-    res.json(property);
+    const property = await Property.findOne({ _id: req.params.id, owner: req.user._id });
+    if (!property) return res.status(404).json({ message: 'Property not found or access denied' });
+    
+    // Map input fields for compatibility
+    const body = { ...req.body };
+    if (body.price_per_night !== undefined) body.price = Number(body.price_per_night);
+    if (body.bedrooms !== undefined) body.bedRooms = Number(body.bedrooms);
+    if (body.address !== undefined) body.location = body.address;
+
+    Object.assign(property, body);
+    await property.save();
+    
+    const responseObj = property.toObject();
+    res.json({
+      ...responseObj,
+      id: property._id,
+      owner_id: property.owner,
+      bedrooms: property.bedRooms,
+      address: property.location,
+      price_per_night: property.price
+    });
   } catch (err) {
-    res.json({ _id: req.params.id, ...req.body, message: 'Mock property updated' });
+    res.status(400).json({ message: err.message });
   }
 });
 
 // PUT toggle active/inactive status
-router.put('/:id/status', async (req, res) => {
+router.put('/:id/status', protect, ownerOnly, async (req, res) => {
   try {
     const { status } = req.body;
     if (!status || !['Active', 'Inactive', 'Inactive Admin', 'Pending'].includes(status)) {
       return res.status(400).json({ message: 'Valid status is required' });
     }
-    const property = await Property.findByIdAndUpdate(
-      req.params.id,
+    const property = await Property.findOneAndUpdate(
+      { _id: req.params.id, owner: req.user._id },
       { status },
       { new: true }
     );
-    if (!property) return res.json({ _id: req.params.id, status, message: 'Mock status updated' });
-    res.json(property);
+    if (!property) return res.status(404).json({ message: 'Property not found or access denied' });
+    
+    const responseObj = property.toObject();
+    res.json({
+      ...responseObj,
+      id: property._id,
+      owner_id: property.owner,
+      bedrooms: property.bedRooms,
+      address: property.location,
+      price_per_night: property.price
+    });
   } catch (err) {
-    res.json({ _id: req.params.id, status: req.body.status, message: 'Mock status updated' });
+    res.status(400).json({ message: err.message });
   }
 });
 
 // DELETE
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', protect, ownerOnly, async (req, res) => {
   try {
-    await Property.findByIdAndDelete(req.params.id);
+    const property = await Property.findOneAndDelete({ _id: req.params.id, owner: req.user._id });
+    if (!property) return res.status(404).json({ message: 'Property not found or access denied' });
     res.json({ message: 'Property deleted' });
   } catch (err) {
-    res.json({ message: 'Property deleted' });
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/properties/ai-search  — Natural language search using Gemini
+router.post('/ai-search', async (req, res) => {
+  try {
+    const { query } = req.body;
+    if (!query || !query.trim()) {
+      return res.status(400).json({ message: 'Query is required' });
+    }
+
+    // Use Gemini to extract structured filters from natural language
+    const geminiKey = process.env.GEMINI_API_KEY;
+    let filters = {};
+
+    if (geminiKey) {
+      try {
+        const prompt = `You are a property search assistant for TripInVilla, an Indian vacation rental platform.
+Extract search parameters from this user query: "${query}"
+
+Return ONLY valid JSON (no markdown, no extra text) with these optional fields:
+{
+  "city": "city name if mentioned",
+  "state": "state name if mentioned",
+  "type": "one of: Villa, Homestay, Resort, Apartment, Cottage, Hotel, Motel, Bungalow",
+  "minPrice": number (per night in INR),
+  "maxPrice": number (per night in INR),
+  "guests": number (minimum guests),
+  "search": "general keyword if no specific city found"
+}
+Only include fields that are clearly mentioned. If no city but a place is mentioned, put it in search.`;
+
+        const geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0, maxOutputTokens: 300 }
+            })
+          }
+        );
+        const geminiData = await geminiRes.json();
+        const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+        const cleaned = rawText.replace(/```json|```/g, '').trim();
+        filters = JSON.parse(cleaned);
+      } catch (aiErr) {
+        console.error('[AI Search] Gemini parsing failed, falling back to text search:', aiErr.message);
+        filters = { search: query };
+      }
+    } else {
+      // No Gemini key — smart keyword extraction fallback
+      const q = query.toLowerCase();
+      const types = ['villa', 'homestay', 'resort', 'apartment', 'cottage', 'hotel', 'motel', 'bungalow'];
+      const foundType = types.find(t => q.includes(t));
+      if (foundType) filters.type = foundType.charAt(0).toUpperCase() + foundType.slice(1);
+
+      const priceMatch = q.match(/under\s*₹?\s*(\d[\d,]*)/i) || q.match(/below\s*₹?\s*(\d[\d,]*)/i);
+      if (priceMatch) filters.maxPrice = parseInt(priceMatch[1].replace(/,/g, ''));
+
+      const guestMatch = q.match(/(\d+)\s*(?:people|guests|persons|pax)/i);
+      if (guestMatch) filters.guests = parseInt(guestMatch[1]);
+
+      // Detect common Indian destinations
+      const indianCities = ['kasol', 'manali', 'shimla', 'goa', 'jaipur', 'udaipur', 'munnar', 'coorg', 
+        'ooty', 'rishikesh', 'nainital', 'alibaug', 'bangalore', 'mumbai', 'delhi', 'kolkata',
+        'darjeeling', 'mussoorie', 'kodaikanal', 'mahabaleshwar', 'lonavala', 'lavasa', 'pondicherry',
+        'kerala', 'himachal', 'rajasthan', 'uttarakhand', 'karnataka', 'maharashtra'];
+      const foundCity = indianCities.find(c => q.includes(c));
+      if (foundCity) {
+        filters.city = foundCity.charAt(0).toUpperCase() + foundCity.slice(1);
+      } else {
+        // Extract the most meaningful word as search
+        filters.search = query;
+      }
+    }
+
+    // Build MongoDB query from extracted filters
+    const dbFilter = { status: 'Active' };
+    if (filters.city) dbFilter.city = { $regex: filters.city, $options: 'i' };
+    if (filters.state) dbFilter.state = { $regex: filters.state, $options: 'i' };
+    if (filters.type) dbFilter.type = filters.type;
+    if (filters.minPrice || filters.maxPrice) {
+      dbFilter.price = {};
+      if (filters.minPrice) dbFilter.price.$gte = Number(filters.minPrice);
+      if (filters.maxPrice) dbFilter.price.$lte = Number(filters.maxPrice);
+    }
+    if (filters.guests) dbFilter.capacity = { $gte: Number(filters.guests) };
+    if (filters.search && !filters.city) {
+      dbFilter.$or = [
+        { name: { $regex: filters.search, $options: 'i' } },
+        { location: { $regex: filters.search, $options: 'i' } },
+        { city: { $regex: filters.search, $options: 'i' } },
+        { state: { $regex: filters.search, $options: 'i' } },
+        { description: { $regex: filters.search, $options: 'i' } }
+      ];
+    }
+
+    const properties = await Property.find(dbFilter).sort({ hasActiveOffer: -1, createdAt: -1 }).limit(20);
+    const formatted = properties.map((p, i) => ({
+      _id: p._id,
+      propertyNo: p.propertyNo || `PR-${1000 + i}`,
+      image: p.images?.[0] || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60',
+      propertyName: p.name,
+      location: p.location,
+      category: p.type,
+      bestRoomRate: p.price,
+      rooms: p.bedRooms,
+      guests: p.capacity,
+      rating: p.rating,
+      status: p.status,
+      hasActiveOffer: p.hasActiveOffer,
+      description: p.description,
+      amenities: p.amenities
+    }));
+
+    res.json({
+      properties: formatted,
+      total: formatted.length,
+      extractedFilters: filters,
+      aiPowered: !!geminiKey
+    });
+  } catch (err) {
+    console.error('AI Search error:', err);
+    res.status(500).json({ message: 'AI search failed', error: err.message });
   }
 });
 
 export default router;
+

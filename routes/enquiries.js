@@ -5,13 +5,18 @@ import OTP from '../models/OTP.js'; // Import MongoDB OTP Cache Model
 import { protect } from '../middleware/auth.js';
 import { sendEnquiryNotification, sendOTPEmail, sendHostLeadAlert } from '../utils/email.js';
 import { sendSMSOTP } from '../utils/sms.js';
+import { sendWhatsAppText } from '../utils/whatsapp.js';
 
 const router = express.Router();
 
-// GET all enquiries (admin/owner only)
+// GET all enquiries (for travelers, show only theirs; for admin, show all)
 router.get('/', protect, async (req, res) => {
   try {
-    const enquiries = await Enquiry.find().sort({ createdAt: -1 }).limit(50);
+    let query = {};
+    if (req.user.role !== 'admin') {
+      query.email = req.user.email;
+    }
+    const enquiries = await Enquiry.find(query).populate('property', 'name location').sort({ createdAt: -1 }).limit(50);
     res.json(enquiries);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -112,13 +117,19 @@ router.post('/verify-otp', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid 6-digit verification code. Please check and try again.' });
     }
 
+    const propName = dbRecord.propertyName || 'Kasol Stay';
+
+    // Try to resolve the property to attach it to the enquiry (for owner dashboards)
+    const property = await Property.findOne({ name: { $regex: new RegExp(propName, 'i') } }).populate('owner');
+
     // OTP is valid! Automatically create the enquiry in the database
     const enquiryData = {
       name: dbRecord.name,
       email: key,
       phone: dbRecord.phone || 'N/A',
-      propertyName: dbRecord.propertyName || 'Kasol Stay',
-      message: `Verified OTP request for host contact number on property: ${dbRecord.propertyName}`
+      property: property?._id,
+      propertyName: property?.name || propName,
+      message: `Verified OTP request for host contact number on property: ${propName}`
     };
 
     const newEnquiry = await Enquiry.create(enquiryData);
@@ -126,12 +137,7 @@ router.post('/verify-otp', async (req, res) => {
     // Send email notification to admin in background
     sendEnquiryNotification(newEnquiry).catch(err => console.error(err));
 
-    // Lookup the Property Owner to send Direct Lead Email & WhatsApp alerts
     try {
-      const propName = dbRecord.propertyName;
-      // Search for the property in database (case-insensitive)
-      const property = await Property.findOne({ name: { $regex: new RegExp(propName, 'i') } }).populate('owner');
-      
       if (property && property.owner) {
         const ownerEmail = property.owner.email;
         const ownerName = property.owner.name;
@@ -140,12 +146,24 @@ router.post('/verify-otp', async (req, res) => {
         // 1. Send Email alert directly to the Host/Owner with direct WhatsApp deep-link!
         sendHostLeadAlert(ownerEmail, ownerName, dbRecord.name, dbRecord.phone || 'N/A', key, propName).catch(err => console.error(err));
 
-        // 2. Simulated WhatsApp Notification Trigger
-        console.log('\n=========================================');
-        console.log('📱 SIMULATED WHATSAPP NOTIFICATION TRIGGERED');
-        console.log(`TO OWNER (${ownerName} - ${ownerPhone})`);
-        console.log(`MESSAGE: "Hi ${ownerName}, a user named ${dbRecord.name} (${dbRecord.phone}) has unlocked your contact number for property '${propName}'. Standby for a call!"`);
-        console.log('=========================================\n');
+        // 2. Real WhatsApp notification (Cloud API) if configured, else simulated log
+        const waMessage =
+          `Hi ${ownerName}, a user named ${dbRecord.name} (${dbRecord.phone || 'N/A'}) ` +
+          `has unlocked your contact number for property '${propName}'. ` +
+          `Guest email: ${key}. Standby for a call/message.`;
+
+        try {
+          const waResult = await sendWhatsAppText(ownerPhone, waMessage);
+          if (!waResult.success) {
+            console.log('\n=========================================');
+            console.log('📱 SIMULATED WHATSAPP NOTIFICATION (ENV NOT CONFIGURED)');
+            console.log(`TO OWNER (${ownerName} - ${ownerPhone})`);
+            console.log(`MESSAGE: "${waMessage}"`);
+            console.log('=========================================\n');
+          }
+        } catch (waErr) {
+          console.error('WhatsApp dispatch failed:', waErr?.message || waErr);
+        }
       }
     } catch (ownerAlertErr) {
       console.error('Failed to dispatch host lead alert:', ownerAlertErr);

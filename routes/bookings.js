@@ -11,11 +11,23 @@ const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_dummy_key_id',
   key_secret: process.env.RAZORPAY_KEY_SECRET || 'dummy_key_secret',
 });
+const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || 'dummy_key_secret';
+const razorpayConfigured = Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
+
+const requireRazorpay = (req, res, next) => {
+  if (!razorpayConfigured && process.env.NODE_ENV === 'production') {
+    return res.status(500).json({ message: 'Razorpay is not configured on the server' });
+  }
+  next();
+};
 
 // CREATE Razorpay Order
-router.post('/create-order', protect, async (req, res) => {
+router.post('/create-order', protect, requireRazorpay, async (req, res) => {
   try {
     const { propertyId, amount } = req.body;
+    if (!amount || Number(amount) <= 0) {
+      return res.status(400).json({ message: 'Valid amount is required' });
+    }
     
     const options = {
       amount: amount * 100, // amount in smallest currency unit (paise)
@@ -31,7 +43,7 @@ router.post('/create-order', protect, async (req, res) => {
 });
 
 // VERIFY Payment & Create Booking
-router.post('/verify', protect, async (req, res) => {
+router.post('/verify', protect, requireRazorpay, async (req, res) => {
   try {
     const { 
       razorpay_order_id, 
@@ -44,7 +56,7 @@ router.post('/verify', protect, async (req, res) => {
       totalPrice
     } = req.body;
 
-    const shasum = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET);
+    const shasum = crypto.createHmac('sha256', razorpayKeySecret);
     shasum.update(`${razorpay_order_id}|${razorpay_payment_id}`);
     const digest = shasum.digest('hex');
 

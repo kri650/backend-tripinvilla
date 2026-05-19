@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 const propertySchema = new mongoose.Schema({
   propertyNo: { type: String },
   name: { type: String, required: true, trim: true },
-  type: { type: String, enum: ['Apartment', 'Villa', 'Resort', 'Homestay', 'Cottage', 'Farmhouse', 'Others'], required: true },
+  type: { type: String, enum: ['Apartment', 'Villa', 'Resort', 'Homestay', 'Cottage', 'Hotel', 'Motel', 'Bungalow', 'Farmhouse', 'Others'], required: true },
   location: { type: String, required: true },
   city: { type: String, required: true },
   state: { type: String },
@@ -16,9 +16,10 @@ const propertySchema = new mongoose.Schema({
   images: [{ type: String }],
   amenities: [{ type: String }],
   description: { type: String },
-  status: { type: String, enum: ['Active', 'Pending', 'Inactive', 'Inactive Admin'], default: 'Active' },
+  status: { type: String, enum: ['Active', 'Pending', 'Inactive', 'Inactive Admin'], default: 'Pending' },
   rating: { type: Number, default: 0, min: 0, max: 5 },
   totalBookings: { type: Number, default: 0 },
+  hasActiveOffer: { type: Boolean, default: false },
   owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 

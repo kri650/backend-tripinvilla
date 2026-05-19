@@ -1,5 +1,6 @@
 import express from 'express';
 import Offer from '../models/Offer.js';
+import Property from '../models/Property.js';
 
 const router = express.Router();
 
@@ -78,6 +79,12 @@ router.post('/', async (req, res) => {
       status: getOfferStatus(dateTo),
       ...req.body
     });
+    
+    // Set the property's hasActiveOffer flag to true so it gets prioritized in listings
+    if (req.body.propertyId) {
+      await Property.findByIdAndUpdate(req.body.propertyId, { hasActiveOffer: true });
+    }
+    
     res.status(201).json(newOffer);
   } catch (err) {
     res.status(201).json({

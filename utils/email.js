@@ -1,4 +1,7 @@
 import nodemailer from 'nodemailer';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const transporter = nodemailer.createTransport({
   service: 'gmail', // or any other service
@@ -107,5 +110,43 @@ export const sendHostLeadAlert = async (hostEmail, hostName, guestName, guestPho
     console.log(`Lead Alert email successfully sent to owner: ${hostEmail}`);
   } catch (error) {
     console.error('Error sending lead alert email to host:', error);
+  }
+};
+
+export const sendOwnerWelcomeEmail = async (ownerEmail, ownerName, tempPassword) => {
+  if (!ownerEmail || !tempPassword) return;
+  const portalUrl = process.env.OWNER_DASHBOARD_URL || 'http://localhost:5175/owner/login';
+
+  const mailOptions = {
+    from: `"Tripinstays" <${process.env.EMAIL_USER}>`,
+    to: ownerEmail,
+    subject: '✅ Your TripInVilla Owner Portal Access',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #E5E7EB; border-radius: 16px; padding: 28px; box-sizing: border-box;">
+        <h2 style="margin: 0 0 12px; color: #111827;">Welcome, ${ownerName || 'Host'}!</h2>
+        <p style="color: #4B5563; line-height: 22px; margin: 0 0 18px;">
+          Your Property Owner Portal account has been created. Use the credentials below to sign in:
+        </p>
+        <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; margin-bottom: 18px;">
+          <p style="margin: 6px 0;"><strong>Email:</strong> ${ownerEmail}</p>
+          <p style="margin: 6px 0;"><strong>Temporary Password:</strong> ${tempPassword}</p>
+        </div>
+        <p style="margin: 0 0 18px;">
+          <a href="${portalUrl}" target="_blank" style="background: #58A429; color: #ffffff; padding: 12px 16px; border-radius: 10px; text-decoration: none; display: inline-block; font-weight: 700;">
+            Open Owner Portal
+          </a>
+        </p>
+        <p style="color: #9CA3AF; font-size: 12px; line-height: 18px; margin: 0;">
+          For security, please change your password after logging in.
+        </p>
+      </div>
+    `
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Owner welcome email sent to: ${ownerEmail}`);
+  } catch (error) {
+    console.error('Error sending owner welcome email:', error);
   }
 };
