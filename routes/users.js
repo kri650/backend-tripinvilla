@@ -18,7 +18,7 @@ router.get('/profile', protect, async (req, res) => {
 // UPDATE user profile
 router.put('/profile', protect, async (req, res) => {
   try {
-    const { name, email, phone, avatar, company, pan, bank, accountNum, ifsc, address, city, state, pincode, citizenship, residence, emergencyName, emergencyPhone, emergencyEmail } = req.body;
+    const { name, email, phone, avatar, company, pan, bank, accountNum, ifsc, address, city, state, pincode, citizenship, residence, emergencyName, emergencyPhone, emergencyEmail, role } = req.body;
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
@@ -40,6 +40,7 @@ router.put('/profile', protect, async (req, res) => {
     if (emergencyName !== undefined) user.emergencyName = emergencyName;
     if (emergencyPhone !== undefined) user.emergencyPhone = emergencyPhone;
     if (emergencyEmail !== undefined) user.emergencyEmail = emergencyEmail;
+    if (role !== undefined && ['owner', 'user'].includes(role)) user.role = role;
 
     await user.save();
     res.json(user);

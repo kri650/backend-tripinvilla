@@ -9,27 +9,15 @@ const mockLocations = [
     _id: "lm1",
     locationName: "Goa, India",
     locationType: "State",
-    parentLocation: "India",
+    parentLocationHierarchy: "India",
     landmarks: [{
+      _id: "ldmk1",
       name: "Anjuna Flea Market",
       popularity: "Tourist Popular",
       images: ["https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=500&auto=format&fit=crop&q=60"]
     }],
     status: "Active",
     aboutLocation: "Coastal paradise renowned for its pristine beaches, vibrant nightlife, and Portuguese heritage architecture."
-  },
-  {
-    _id: "lm2",
-    locationName: "Candolim",
-    locationType: "Area",
-    parentLocation: "North Goa",
-    landmarks: [{
-      name: "Aguada Fort",
-      popularity: "Historical Landmark",
-      images: ["https://images.unsplash.com/photo-1544644181-1484b3fdfc62?w=500&auto=format&fit=crop&q=60"]
-    }],
-    status: "Active",
-    aboutLocation: "Tranquil beachfront destination offering upscale dining, water sports, and historic 17th-century fortifications."
   }
 ];
 
@@ -37,7 +25,15 @@ const mockLocations = [
 router.get('/', async (req, res) => {
   try {
     const locationsDb = await LocationMaster.find().sort({ createdAt: -1 });
-    let results = locationsDb;
+    let results = locationsDb.map(l => ({
+      _id: l._id,
+      locationName: l.locationName,
+      locationType: l.locationType,
+      parentLocationHierarchy: l.parentLocation,
+      landmarks: l.landmarks,
+      status: l.status,
+      aboutLocation: l.aboutLocation
+    }));
 
     if (results.length === 0) {
       results = mockLocations;
@@ -48,64 +44,73 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST add location master with landmark image uploads
-router.post('/', upload.array('landmarkImages', 10), async (req, res) => {
+// GET active locations for frontend carousel
+router.get('/active', async (req, res) => {
+  try {
+    const locationsDb = await LocationMaster.find({ status: 'Active' }).sort({ createdAt: -1 });
+    let results = locationsDb.map(l => ({
+      _id: l._id,
+      locationName: l.locationName,
+      locationType: l.locationType,
+      parentLocationHierarchy: l.parentLocation,
+      landmarks: l.landmarks,
+      status: l.status,
+      aboutLocation: l.aboutLocation
+    }));
+
+    if (results.length === 0) {
+      results = mockLocations.filter(l => l.status === 'Active');
+    }
+    res.json(results);
+  } catch (err) {
+    res.json(mockLocations.filter(l => l.status === 'Active'));
+  }
+});
+
+// POST add location master
+router.post('/', async (req, res) => {
   try {
     const data = { ...req.body };
-    let landmarks = [];
+    data.parentLocation = data.parentLocationHierarchy;
 
-    if (data.landmarks) {
-      try {
-        landmarks = typeof data.landmarks === 'string' ? JSON.parse(data.landmarks) : data.landmarks;
-      } catch (e) {
-        landmarks = [{ name: data.landmarks, popularity: 'Tourist Popular', images: [] }];
-      }
-    } else if (data.landmarkName) {
-      landmarks = [{ name: data.landmarkName, popularity: data.landmarkPopularity || 'Tourist Popular', images: [] }];
+    let parsedLandmarks = [];
+    if (data.landmarks && Array.isArray(data.landmarks)) {
+      parsedLandmarks = data.landmarks.map(l => ({
+        name: l.landmarkName || l.name,
+        popularity: l.landmarkPopularity || l.popularity || 'Tourist Popular',
+        images: l.landmarkImageUrl ? [l.landmarkImageUrl] : (l.images || [])
+      }));
     }
-
-    if (req.files && req.files.length > 0 && landmarks.length > 0) {
-      landmarks[0].images = req.files.map(file => file.filename.startsWith('http') ? file.filename : `/uploads/${file.filename}`);
-    }
-
-    data.landmarks = landmarks;
+    data.landmarks = parsedLandmarks;
 
     const newLocation = await LocationMaster.create(data);
     res.status(201).json(newLocation);
   } catch (err) {
-    res.status(201).json({ _id: Date.now(), ...req.body });
+    console.error(err);
+    res.status(500).json({ message: 'Error creating location' });
   }
 });
 
 // PUT edit location master
-router.put('/:id', upload.array('landmarkImages', 10), async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const data = { ...req.body };
-    let landmarks = [];
+    if (data.parentLocationHierarchy) data.parentLocation = data.parentLocationHierarchy;
 
-    if (data.landmarks) {
-      try {
-        landmarks = typeof data.landmarks === 'string' ? JSON.parse(data.landmarks) : data.landmarks;
-      } catch (e) {
-        landmarks = [{ name: data.landmarks, popularity: 'Tourist Popular', images: [] }];
-      }
-    } else if (data.landmarkName) {
-      landmarks = [{ name: data.landmarkName, popularity: data.landmarkPopularity || 'Tourist Popular', images: [] }];
-    }
-
-    if (req.files && req.files.length > 0 && landmarks.length > 0) {
-      landmarks[0].images = req.files.map(file => file.filename.startsWith('http') ? file.filename : `/uploads/${file.filename}`);
-    }
-
-    if (landmarks.length > 0) {
-      data.landmarks = landmarks;
+    if (data.landmarks && Array.isArray(data.landmarks)) {
+      data.landmarks = data.landmarks.map(l => ({
+        _id: l._id,
+        name: l.landmarkName || l.name,
+        popularity: l.landmarkPopularity || l.popularity || 'Tourist Popular',
+        images: l.landmarkImageUrl ? [l.landmarkImageUrl] : (l.images || [])
+      }));
     }
 
     const location = await LocationMaster.findByIdAndUpdate(req.params.id, data, { new: true });
-    if (!location) return res.json({ _id: req.params.id, ...data, message: 'Mock location master updated' });
+    if (!location) return res.status(404).json({ message: 'Location not found' });
     res.json(location);
   } catch (err) {
-    res.json({ _id: req.params.id, ...req.body, message: 'Mock location master updated' });
+    res.status(500).json({ message: 'Error updating location' });
   }
 });
 
@@ -115,7 +120,31 @@ router.delete('/:id', async (req, res) => {
     await LocationMaster.findByIdAndDelete(req.params.id);
     res.json({ message: 'Location master deleted successfully' });
   } catch (err) {
-    res.json({ message: 'Location master deleted successfully' });
+    res.status(500).json({ message: 'Error deleting location' });
+  }
+});
+
+// POST add landmark to location
+router.post('/:id/landmarks', async (req, res) => {
+  try {
+    const loc = await LocationMaster.findById(req.params.id);
+    if (!loc) return res.status(404).json({ message: 'Location not found' });
+
+    const newLandmark = {
+      name: req.body.landmarkName || req.body.name,
+      popularity: req.body.landmarkPopularity || req.body.popularity || 'Tourist Popular',
+      images: req.body.landmarkImageUrl ? [req.body.landmarkImageUrl] : (req.body.image_url ? [req.body.image_url] : [])
+    };
+
+    loc.landmarks.push(newLandmark);
+    await loc.save();
+    
+    // Return the newly added landmark with its generated _id
+    const added = loc.landmarks[loc.landmarks.length - 1];
+    res.status(201).json(added);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error adding landmark' });
   }
 });
 

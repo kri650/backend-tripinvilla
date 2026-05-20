@@ -15,13 +15,18 @@ const propertyRequestSchema = new mongoose.Schema({
   property_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Property' },
   category: { type: String },
   room_type: { type: String },
+  room_image_url: { type: String },
   bed_type: { type: String },
   amenities_types: [{ type: String }],
   price_per_room: { type: Number },
+  original_price: { type: Number },
   checkin_time: { type: String },
   checkout_time: { type: String },
-  offer_percent: { type: String },
-  rules: { type: String },
+  offers: [{ type: String }],
+  rules: [{
+    title: { type: String },
+    points: [{ type: String }]
+  }],
   admin_status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' }
 }, { timestamps: true });
 

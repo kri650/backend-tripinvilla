@@ -7,10 +7,10 @@ const router = express.Router();
 
 // GET all property requests (Admin View)
 // GET /api/property-requests
-router.get('/', async (req, res) => {
+router.get('/', protect, adminOnly, async (req, res) => {
   try {
     const requestsDb = await PropertyRequest.find()
-      .populate('property', 'name location city type')
+      .populate('property', 'name location city type description images')
       .sort({ createdAt: -1 });
 
     const [totalProperties, pendingRequests, rejectedRequests] = await Promise.all([
@@ -29,6 +29,7 @@ router.get('/', async (req, res) => {
       ownerName: r.ownerName,
       ownerContact: r.ownerContact,
       priceByOwner: r.price_per_room || r.priceByOwner,
+      about: r.property?.description || '',
       status: r.admin_status === 'approved' ? 'Accepted' : (r.admin_status === 'rejected' ? 'Rejected' : 'NotAccepted'),
       createdAt: r.createdAt
     }));
@@ -47,7 +48,7 @@ router.get('/', async (req, res) => {
 });
 
 // PUT /api/property-requests/:id/accept -> Approve request (Admin View)
-router.put('/:id/accept', async (req, res) => {
+router.put('/:id/accept', protect, adminOnly, async (req, res) => {
   try {
     const request = await PropertyRequest.findById(req.params.id);
     if (!request) return res.status(404).json({ message: 'Property request not found' });
@@ -69,7 +70,7 @@ router.put('/:id/accept', async (req, res) => {
 });
 
 // PUT /api/property-requests/:id/reject -> Reject request (Admin View)
-router.put('/:id/reject', async (req, res) => {
+router.put('/:id/reject', protect, adminOnly, async (req, res) => {
   try {
     const request = await PropertyRequest.findById(req.params.id);
     if (!request) return res.status(404).json({ message: 'Property request not found' });
@@ -97,7 +98,7 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
     const propertyIds = properties.map(p => p._id);
     
     const requests = await PropertyRequest.find({ property: { $in: propertyIds } })
-      .populate('property', 'name location city type')
+      .populate('property', 'name location city type images')
       .sort({ createdAt: -1 });
       
     const formatted = requests.map(r => {
@@ -109,12 +110,14 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
         propertyName: r.property?.name || r.propertyName,
         category: r.property?.type || r.category,
         room_type: r.room_type,
+        room_image_url: r.room_image_url,
         bed_type: r.bed_type,
         amenities_types: r.amenities_types,
+        original_price: r.original_price,
         price_per_room: r.price_per_room,
         checkin_time: r.checkin_time,
         checkout_time: r.checkout_time,
-        offer_percent: r.offer_percent,
+        offers: r.offers,
         rules: r.rules,
         admin_status: r.admin_status || 'pending'
       };
@@ -125,10 +128,40 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
   }
 });
 
+// GET /api/property-requests/property/:propertyId -> Public approved rooms for a property
+router.get('/property/:propertyId', async (req, res) => {
+  try {
+    const requests = await PropertyRequest.find({
+      property: req.params.propertyId,
+      admin_status: 'approved'
+    }).populate('property', 'images');
+    const formatted = requests.map(r => ({
+      _id: r._id,
+      title: r.room_type || 'Deluxe Room',
+      img: r.room_image_url || r.image || (r.property?.images && r.property.images.length > 0 ? r.property.images[0] : 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=600&q=80'),
+      features: [
+        ...(r.amenities_types || [])
+      ],
+      offers: r.offers || [],
+      beds: r.bed_type || '2 Beds',
+      rooms: '1 Room',
+      guests: '3 Person',
+      originalPrice: r.original_price,
+      price: r.price_per_room || 1400,
+      checkIn: r.checkin_time,
+      checkOut: r.checkout_time,
+      rules: r.rules
+    }));
+    res.json(formatted);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/property-requests -> Submit request
 router.post('/', protect, ownerOnly, async (req, res) => {
   try {
-    const { property_id, room_type, bed_type, amenities_types, price_per_room, checkin_time, checkout_time, offer_percent, rules } = req.body;
+    const { property_id, room_type, room_image_url, bed_type, amenities_types, original_price, price_per_room, checkin_time, checkout_time, offers, rules } = req.body;
     
     const property = await Property.findOne({ _id: property_id, owner: req.user._id });
     if (!property) return res.status(404).json({ message: 'Property not found or access denied' });
@@ -148,12 +181,14 @@ router.post('/', protect, ownerOnly, async (req, res) => {
       priceByOwner: Number(price_per_room),
       
       room_type,
+      room_image_url,
       bed_type,
       amenities_types: Array.isArray(amenities_types) ? amenities_types : [],
+      original_price: original_price ? Number(original_price) : undefined,
       price_per_room: Number(price_per_room),
       checkin_time,
       checkout_time,
-      offer_percent,
+      offers: Array.isArray(offers) ? offers : [],
       rules,
       admin_status: 'pending',
       status: 'pending' // compatibility

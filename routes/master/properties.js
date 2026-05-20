@@ -1,5 +1,6 @@
 import express from 'express';
 import PropertyMaster from '../../models/PropertyMaster.js';
+import PropertyExperienceTag from '../../models/PropertyExperienceTag.js';
 import { upload } from '../../middleware/upload.js';
 
 const router = express.Router();
@@ -106,6 +107,37 @@ router.delete('/:id', async (req, res) => {
     res.json({ message: 'Property master deleted successfully' });
   } catch (err) {
     res.json({ message: 'Property master deleted successfully' });
+  }
+});
+
+// POST tag property with an experience
+// POST /api/admin/properties/:id/experiences
+router.post('/:id/experiences', async (req, res) => {
+  try {
+    const { experienceId } = req.body;
+    if (!experienceId) {
+      return res.status(400).json({ message: 'Experience ID is required' });
+    }
+    
+    // Check if tag already exists
+    const existing = await PropertyExperienceTag.findOne({
+      propertyId: req.params.id,
+      experienceId: experienceId
+    });
+    
+    if (existing) {
+      return res.status(200).json(existing);
+    }
+    
+    const newTag = await PropertyExperienceTag.create({
+      propertyId: req.params.id,
+      experienceId: experienceId
+    });
+    
+    res.status(201).json(newTag);
+  } catch (err) {
+    console.error('Error tagging property:', err);
+    res.status(500).json({ message: 'Error tagging property' });
   }
 });
 

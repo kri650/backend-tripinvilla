@@ -1,6 +1,7 @@
 import express from 'express';
 import StateMaster from '../../models/StateMaster.js';
 import CityMaster from '../../models/CityMaster.js';
+import User from '../../models/User.js';
 
 const router = express.Router();
 
@@ -14,11 +15,19 @@ const mockStates = [
 // GET all states with virtual counts
 router.get('/', async (req, res) => {
   try {
-    const statesDb = await StateMaster.find().populate('countryId').sort({ stateName: 1 });
+    const filter = {};
+    if (req.query.country_id) {
+      filter.countryId = req.query.country_id;
+    }
+
+    const statesDb = await StateMaster.find(filter).populate('countryId').sort({ stateName: 1 });
     let results = [];
 
     for (const st of statesDb) {
       const citiesCount = await CityMaster.countDocuments({ stateId: st._id });
+      // Owners count from users where role = 'owner' and state = st._id
+      const ownersCount = await User.countDocuments({ role: 'owner', state: st._id.toString() });
+
       results.push({
         _id: st._id,
         stateName: st.stateName,
@@ -26,17 +35,42 @@ router.get('/', async (req, res) => {
         countryName: st.countryId ? st.countryId.countryName : 'N/A',
         status: st.status,
         citiesCount: citiesCount,
-        ownersCount: st.ownersCount || 0
+        ownersCount: ownersCount
       });
     }
 
-    if (results.length === 0) {
+    if (results.length === 0 && !req.query.country_id) {
       results = mockStates;
     }
 
     res.json(results);
   } catch (err) {
     res.json(mockStates);
+  }
+});
+
+// GET active states for dropdowns
+router.get('/active', async (req, res) => {
+  try {
+    const filter = { status: 'Active' };
+    if (req.query.country_id) {
+      filter.countryId = req.query.country_id;
+    }
+    const statesDb = await StateMaster.find(filter).populate('countryId').sort({ stateName: 1 });
+    let results = statesDb.map(st => ({
+      _id: st._id,
+      stateName: st.stateName,
+      countryId: st.countryId,
+      countryName: st.countryId ? st.countryId.countryName : 'N/A',
+      status: st.status
+    }));
+
+    if (results.length === 0 && !req.query.country_id) {
+      results = mockStates.filter(s => s.status === 'Active');
+    }
+    res.json(results);
+  } catch (err) {
+    res.json(mockStates.filter(s => s.status === 'Active'));
   }
 });
 
@@ -64,10 +98,15 @@ router.put('/:id', async (req, res) => {
 // DELETE state
 router.delete('/:id', async (req, res) => {
   try {
+    const citiesCount = await CityMaster.countDocuments({ stateId: req.params.id });
+    if (citiesCount > 0) {
+      return res.status(400).json({ message: 'Cannot delete state because it has associated cities.' });
+    }
+
     await StateMaster.findByIdAndDelete(req.params.id);
     res.json({ message: 'State master deleted successfully' });
   } catch (err) {
-    res.json({ message: 'State master deleted successfully' });
+    res.status(500).json({ message: 'Error deleting state master' });
   }
 });
 

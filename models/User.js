@@ -23,6 +23,7 @@ const userSchema = new mongoose.Schema({
   emergencyPhone: { type: String },
   emergencyEmail: { type: String },
   isBlacklisted: { type: Boolean, default: false },
+  isPremium: { type: Boolean, default: false },
   lastLogin: { type: Date },
   status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
   wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Property' }],

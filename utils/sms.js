@@ -1,26 +1,31 @@
 /**
  * Fast2SMS Gateway Integration
+ * Docs: https://docs.fast2sms.com/
  */
 export const sendSMSOTP = async (phone, otpCode) => {
   const apiKey = process.env.FAST2SMS_API_KEY;
   if (!apiKey) {
-    console.warn('⚠️ FAST2SMS_API_KEY is not set in .env. Falling back to simulated OTP delivery.');
+    console.warn('⚠️ FAST2SMS_API_KEY is not set in .env');
     return { success: false, simulated: true };
   }
 
   // Standardize the mobile number (Fast2SMS expects 10 digits without +91 country prefix)
-  let cleanPhone = phone.replace(/[^0-9]/g, '');
+  let cleanPhone = String(phone).replace(/[^0-9]/g, '');
   if (cleanPhone.startsWith('91') && cleanPhone.length === 12) {
     cleanPhone = cleanPhone.substring(2);
+  }
+
+  if (cleanPhone.length !== 10) {
+    throw new Error(`Invalid phone number format: ${phone}. Must be 10 digits.`);
   }
 
   const senderId = process.env.FAST2SMS_SENDER_ID;
   const templateId = process.env.FAST2SMS_TEMPLATE_ID;
 
   let requestBody = {};
-  
+
   if (templateId && senderId) {
-    // 1. Custom DLT route (if you have your own registered Sender and Template IDs)
+    // DLT route — use when you have registered Sender ID + Template ID on TRAI portal
     requestBody = {
       route: 'dlt',
       numbers: cleanPhone,
@@ -30,17 +35,20 @@ export const sendSMSOTP = async (phone, otpCode) => {
       flash: 0
     };
   } else {
-    // 2. Generic pre-approved Fast2SMS OTP route (works instantly out-of-the-box!)
+    // Quick SMS route — works with Fast2SMS registered accounts (no DLT needed)
     requestBody = {
-      route: 'otp',
-      numbers: cleanPhone,
-      variables_values: otpCode
+      route: 'q',
+      message: `Your TripInVilla verification code is: ${otpCode}. Valid for 5 minutes. Do not share with anyone.`,
+      language: 'english',
+      flash: 0,
+      numbers: cleanPhone
     };
   }
 
+  console.log(`[SMS] Sending OTP to ${cleanPhone} via Fast2SMS (route: ${requestBody.route})...`);
+  console.log(`[SMS] Request body:`, JSON.stringify(requestBody));
+
   try {
-    console.log(`[SMS] Sending Fast2SMS request for ${cleanPhone}...`);
-    
     const response = await fetch('https://www.fast2sms.com/dev/bulkV2', {
       method: 'POST',
       headers: {
@@ -51,15 +59,21 @@ export const sendSMSOTP = async (phone, otpCode) => {
     });
 
     const data = await response.json();
-    console.log('[SMS] Fast2SMS Gateway Response:', data);
+    console.log('[SMS] Fast2SMS Response:', JSON.stringify(data));
 
     if (data.return === true) {
+      console.log(`[SMS] ✅ OTP SMS delivered to ${cleanPhone}`);
       return { success: true, data };
     } else {
-      throw new Error(data.message || 'Fast2SMS API returned return=false response');
+      const errMsg = Array.isArray(data.message) ? data.message.join(', ') : (data.message || 'Unknown Fast2SMS error');
+      console.error(`[SMS] ❌ Fast2SMS rejected request: ${errMsg}`);
+      throw new Error(`Fast2SMS Error: ${errMsg}`);
     }
   } catch (err) {
-    console.error('[SMS] Fast2SMS request execution failed:', err);
-    throw err;
+    if (err.message && err.message.startsWith('Fast2SMS Error:')) {
+      throw err;
+    }
+    console.error('[SMS] Network/fetch error calling Fast2SMS:', err.message);
+    throw new Error(`SMS network error: ${err.message}`);
   }
 };

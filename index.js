@@ -56,6 +56,7 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/tripinvilla
 import authRoutes from './routes/auth.js';
 import propertyRoutes from './routes/properties.js';
 import enquiryRoutes from './routes/enquiries.js';
+import reviewsRouter from './routes/reviews.js';
 import dashboardRoutes from './routes/dashboard.js';
 import ownerDashboardRouter from './routes/ownerDashboard.js';
 import propertyRequestRoutes from './routes/propertyRequests.js';
@@ -69,9 +70,11 @@ import countryMasterRoutes from './routes/master/countries.js';
 import stateMasterRoutes from './routes/master/states.js';
 import cityMasterRoutes from './routes/master/cities.js';
 import locationMasterRoutes from './routes/master/locations.js';
+import landmarkMasterRoutes from './routes/master/landmarks.js';
 import destinationMasterRoutes from './routes/master/destinations.js';
 import experienceMasterRoutes from './routes/master/experiences.js';
 import amenitiesMasterRoutes from './routes/master/amenities.js';
+import pricingRuleRoutes from './routes/pricingRules.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -89,17 +92,26 @@ app.use('/api/offers', offerRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/master/properties', propertyMasterRoutes);
+app.use('/api/admin/properties', propertyMasterRoutes);
+app.use('/api/admin/countries', countryMasterRoutes);
 app.use('/api/master/countries', countryMasterRoutes);
+app.use('/api/admin/states', stateMasterRoutes);
 app.use('/api/master/states', stateMasterRoutes);
+app.use('/api/admin/cities', cityMasterRoutes);
 app.use('/api/master/cities', cityMasterRoutes);
+app.use('/api/admin/locations', locationMasterRoutes);
+app.use('/api/admin/landmarks', landmarkMasterRoutes);
 app.use('/api/master/locations', locationMasterRoutes);
+app.use('/api/reviews', reviewsRouter);
 // Back-compat aliases (some clients use /api/master/*)
 app.use('/api/master/destinations', destinationMasterRoutes);
 app.use('/api/master/experiences', experienceMasterRoutes);
+app.use('/api/admin/amenities', amenitiesMasterRoutes);
 app.use('/api/master/amenities', amenitiesMasterRoutes);
 app.use('/api/masters/destinations', destinationMasterRoutes);
 app.use('/api/masters/experiences', experienceMasterRoutes);
 app.use('/api/masters/amenities', amenitiesMasterRoutes);
+app.use('/api/pricing-rules', pricingRuleRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date() }));

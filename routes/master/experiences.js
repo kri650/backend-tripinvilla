@@ -1,6 +1,6 @@
 import express from 'express';
 import ExperienceMaster from '../../models/ExperienceMaster.js';
-import PropertyMaster from '../../models/PropertyMaster.js';
+import PropertyExperienceTag from '../../models/PropertyExperienceTag.js';
 import { upload } from '../../middleware/upload.js';
 
 const router = express.Router();
@@ -11,20 +11,49 @@ const mockExperiences = [
   { _id: "exp3", experienceName: "Mountain View", representingIcon: "Mountain", themeCoverImageUrl: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=500&auto=format&fit=crop&q=60", description: "High altitude panoramic stays amidst snowy peaks and crisp mountain air.", propertiesCount: 35, status: "Active" }
 ];
 
+// GET active experiences for frontend tab
+router.get('/active', async (req, res) => {
+  try {
+    const experiencesDb = await ExperienceMaster.find({ status: 'Active' }).sort({ experienceName: 1 });
+    let results = [];
+
+    for (const exp of experiencesDb) {
+      const count = await PropertyExperienceTag.countDocuments({ experienceId: exp._id });
+      results.push({
+        _id: exp._id,
+        name: exp.experienceName,
+        icon: exp.representingIcon || 'TreePine',
+        cover_image_url: exp.themeCoverImageUrl,
+        description: exp.description,
+        propertiesCount: count,
+        status: exp.status
+      });
+    }
+
+    if (results.length === 0) {
+      results = mockExperiences.filter(e => e.status === 'Active').map(e => ({
+        _id: e._id, name: e.experienceName, icon: e.representingIcon, cover_image_url: e.themeCoverImageUrl, description: e.description, propertiesCount: e.propertiesCount, status: e.status
+      }));
+    }
+    res.json(results);
+  } catch (err) {
+    res.json(mockExperiences.filter(e => e.status === 'Active'));
+  }
+});
+
 // GET all unique experiences with auto-calculated counts
-// GET /api/masters/experiences
 router.get('/', async (req, res) => {
   try {
     const experiencesDb = await ExperienceMaster.find().sort({ experienceName: 1 });
     let results = [];
 
     for (const exp of experiencesDb) {
-      const count = await PropertyMaster.countDocuments({ aboutProperty: { $regex: exp.experienceName, $options: 'i' } });
+      const count = await PropertyExperienceTag.countDocuments({ experienceId: exp._id });
       results.push({
         _id: exp._id,
         experienceName: exp.experienceName,
         representingIcon: exp.representingIcon || 'TreePine',
-        themeCoverImageUrl: exp.themeCoverImageUrl || 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=500&auto=format&fit=crop&q=60',
+        themeCoverImageUrl: exp.themeCoverImageUrl,
         description: exp.description,
         propertiesCount: count,
         status: exp.status
@@ -42,12 +71,13 @@ router.get('/', async (req, res) => {
 });
 
 // POST add experience
-// POST /api/masters/experiences
 router.post('/', upload.single('themeCoverImage'), async (req, res) => {
   try {
     const data = { ...req.body };
     if (req.file) {
       data.themeCoverImageUrl = req.file.filename.startsWith('http') ? req.file.filename : `/uploads/${req.file.filename}`;
+    } else if (data.themeCoverImageUrl) {
+      // Allow passing URL directly
     }
     const newExp = await ExperienceMaster.create(data);
     res.status(201).json(newExp);
@@ -57,7 +87,6 @@ router.post('/', upload.single('themeCoverImage'), async (req, res) => {
 });
 
 // PUT edit experience
-// PUT /api/masters/experiences/:id
 router.put('/:id', upload.single('themeCoverImage'), async (req, res) => {
   try {
     const data = { ...req.body };
@@ -73,9 +102,10 @@ router.put('/:id', upload.single('themeCoverImage'), async (req, res) => {
 });
 
 // DELETE experience
-// DELETE /api/masters/experiences/:id
 router.delete('/:id', async (req, res) => {
   try {
+    // Delete tags as well
+    await PropertyExperienceTag.deleteMany({ experienceId: req.params.id });
     await ExperienceMaster.findByIdAndDelete(req.params.id);
     res.json({ message: 'Experience master deleted successfully' });
   } catch (err) {

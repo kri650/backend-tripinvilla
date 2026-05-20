@@ -1,11 +1,10 @@
 import mongoose from 'mongoose';
 
 const otpSchema = new mongoose.Schema({
-  email: { 
+  phone: { 
     type: String, 
     required: true, 
-    unique: true, 
-    lowercase: true, 
+    unique: true,
     trim: true 
   },
   otp: { 
@@ -16,9 +15,10 @@ const otpSchema = new mongoose.Schema({
     type: String, 
     required: true 
   },
-  phone: { 
-    type: String, 
-    required: true 
+  email: { 
+    type: String,
+    lowercase: true,
+    trim: true 
   },
   propertyName: { 
     type: String 

@@ -3,6 +3,7 @@ import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import Booking from '../models/Booking.js';
 import Property from '../models/Property.js';
+import User from '../models/User.js';
 import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -111,6 +112,54 @@ router.get('/my-bookings', protect, async (req, res) => {
         status: "Completed"
       }
     ]);
+  }
+});
+
+// GET Razorpay Key
+router.get('/razorpay-key', protect, (req, res) => {
+  res.json({ key: process.env.RAZORPAY_KEY_ID || 'rzp_test_dummy_key_id' });
+});
+
+// CREATE Razorpay Premium Upgrade Order
+router.post('/create-premium-order', protect, requireRazorpay, async (req, res) => {
+  try {
+    const options = {
+      amount: 2999 * 100, // ₹2,999 in paise
+      currency: "INR",
+      receipt: `premium_${Date.now()}`,
+    };
+    const order = await razorpay.orders.create(options);
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// VERIFY Premium Payment & Update User
+router.post('/verify-premium', protect, requireRazorpay, async (req, res) => {
+  try {
+    const { 
+      razorpay_order_id, 
+      razorpay_payment_id, 
+      razorpay_signature
+    } = req.body;
+
+    const shasum = crypto.createHmac('sha256', razorpayKeySecret);
+    shasum.update(`${razorpay_order_id}|${razorpay_payment_id}`);
+    const digest = shasum.digest('hex');
+
+    if (digest !== razorpay_signature) {
+      return res.status(400).json({ message: 'Transaction not legitimate!' });
+    }
+
+    const user = await User.findByIdAndUpdate(req.user.id, { isPremium: true }, { new: true });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json({ message: 'Premium membership activated successfully!', user });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 

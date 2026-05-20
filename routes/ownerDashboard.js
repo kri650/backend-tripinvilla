@@ -3,6 +3,7 @@ import Property from '../models/Property.js';
 import Enquiry from '../models/Enquiry.js';
 import Offer from '../models/Offer.js';
 import Booking from '../models/Booking.js';
+import PropertyReview from '../models/PropertyReview.js';
 import { protect, ownerOnly } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -35,6 +36,12 @@ router.get('/stats', async (req, res) => {
     // Calculate occupancy rate (simplified: bookings per property)
     const occupancyRate = totalProperties > 0 ? Math.min(100, Math.round((totalBookings / (totalProperties * 30)) * 100)) : 0;
 
+    // Calculate Average Rating
+    const allReviews = await PropertyReview.find({ property_id: { $in: propertyIds } });
+    const averageRating = allReviews.length > 0 
+      ? (allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length).toFixed(1)
+      : 'N/A';
+
     res.json({
       totalProperties,
       activeProperties,
@@ -42,6 +49,7 @@ router.get('/stats', async (req, res) => {
       totalRevenue,
       totalBookings,
       occupancyRate,
+      averageRating,
       compareYesterday: {
         enquiries: "+2.5",
         revenue: "+12.4",

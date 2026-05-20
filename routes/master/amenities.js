@@ -3,60 +3,131 @@ import AmenitiesMaster from '../../models/AmenitiesMaster.js';
 
 const router = express.Router();
 
-const mockAmenitiesList = [
-  { _id: "am1", amenitiesName: "Barbeque Setup", amenitiesCategory: "Fine & Dining", availabilityScope: "Villa", checkIn: "05:00 PM", checkOut: "11:00 PM", offer: "20% Off on Marination", status: "Active" },
-  { _id: "am2", amenitiesName: "Private Heated Pool", amenitiesCategory: "Recreation", availabilityScope: "All", checkIn: "08:00 AM", checkOut: "10:00 PM", offer: "Complimentary Poolside Mocktails", status: "Active" },
-  { _id: "am3", amenitiesName: "Ayurvedic Spa & Sauna", amenitiesCategory: "Wellness", availabilityScope: "Resort", checkIn: "09:00 AM", checkOut: "08:00 PM", offer: "15% Off Couple Therapy", status: "Active" },
-  { _id: "am4", amenitiesName: "High-Speed WiFi & Work Desk", amenitiesCategory: "Business", availabilityScope: "Homestay", checkIn: "12:00 PM", checkOut: "12:00 PM", offer: "Free Unlimited Bandwidth", status: "Active" }
+// ─── Seed data fallback ────────────────────────────────────────────────────
+const seedAmenities = [
+  { _id: 'am01', amenitiesName: 'High-Speed WiFi', amenitiesCategory: 'Basic', availabilityScope: 'All', icon: 'Wifi', status: 'Active' },
+  { _id: 'am02', amenitiesName: 'Air Conditioning', amenitiesCategory: 'Basic', availabilityScope: 'All', icon: 'Wind', status: 'Active' },
+  { _id: 'am03', amenitiesName: 'Smart TV', amenitiesCategory: 'Basic', availabilityScope: 'All', icon: 'Tv', status: 'Active' },
+  { _id: 'am04', amenitiesName: 'Parking Space', amenitiesCategory: 'Basic', availabilityScope: 'All', icon: 'Car', status: 'Active' },
+  { _id: 'am05', amenitiesName: 'Modular Kitchen', amenitiesCategory: 'Kitchen', availabilityScope: 'All', icon: 'ChefHat', status: 'Active' },
+  { _id: 'am06', amenitiesName: 'Barbeque Setup', amenitiesCategory: 'Fine & Dining', availabilityScope: 'Villa', icon: 'Flame', status: 'Active' },
+  { _id: 'am07', amenitiesName: 'Private Heated Pool', amenitiesCategory: 'Recreation', availabilityScope: 'Villa', icon: 'Waves', status: 'Active' },
+  { _id: 'am08', amenitiesName: 'Outdoor Garden', amenitiesCategory: 'Outdoor', availabilityScope: 'Villa', icon: 'Trees', status: 'Active' },
+  { _id: 'am09', amenitiesName: 'Fire Safety System', amenitiesCategory: 'Safety', availabilityScope: 'All', icon: 'ShieldCheck', status: 'Active' },
+  { _id: 'am10', amenitiesName: 'CCTV Surveillance', amenitiesCategory: 'Safety', availabilityScope: 'All', icon: 'ShieldCheck', status: 'Active' },
+  { _id: 'am11', amenitiesName: 'Ayurvedic Spa & Sauna', amenitiesCategory: 'Wellness', availabilityScope: 'Resort', icon: 'Waves', status: 'Active' },
+  { _id: 'am12', amenitiesName: 'Work Desk & Co-working', amenitiesCategory: 'Business', availabilityScope: 'Homestay', icon: 'Tv', status: 'Active' },
+  { _id: 'am13', amenitiesName: 'Mountain View Terrace', amenitiesCategory: 'View', availabilityScope: 'Villa', icon: 'Trees', status: 'Active' },
+  { _id: 'am14', amenitiesName: 'Fine Dining Restaurant', amenitiesCategory: 'Fine & Dining', availabilityScope: 'Resort', icon: 'Utensils', status: 'Active' },
+  { _id: 'am15', amenitiesName: 'Home Theatre', amenitiesCategory: 'Luxury', availabilityScope: 'Villa', icon: 'Tv', status: 'Active' },
 ];
 
-// GET all amenities
-// GET /api/masters/amenities
+// ─── Helper: apply query filters ───────────────────────────────────────────
+function applyFilters(list, query) {
+  let result = [...list];
+  if (query.category) {
+    result = result.filter(a =>
+      (a.amenitiesCategory || '').toLowerCase() === query.category.toLowerCase()
+    );
+  }
+  if (query.scope) {
+    result = result.filter(a =>
+      (a.availabilityScope || '').toLowerCase() === query.scope.toLowerCase()
+    );
+  }
+  if (query.status) {
+    result = result.filter(a =>
+      (a.status || '').toLowerCase() === query.status.toLowerCase()
+    );
+  }
+  return result;
+}
+
+// ─── GET all amenities (with optional ?category=X &scope=X &status=X) ──────
+// GET /api/admin/amenities  OR  /api/master/amenities  OR /api/masters/amenities
 router.get('/', async (req, res) => {
   try {
-    const amenitiesDb = await AmenitiesMaster.find().sort({ amenitiesName: 1 });
-    let results = amenitiesDb;
+    const dbQuery = {};
+    if (req.query.category) dbQuery.amenitiesCategory = { $regex: new RegExp(`^${req.query.category}$`, 'i') };
+    if (req.query.scope) dbQuery.availabilityScope = { $regex: new RegExp(`^${req.query.scope}$`, 'i') };
+    if (req.query.status) dbQuery.status = { $regex: new RegExp(`^${req.query.status}$`, 'i') };
 
-    if (results.length === 0) {
-      results = mockAmenitiesList;
-    }
-    res.json(results);
+    const rows = await AmenitiesMaster.find(dbQuery).sort({ amenitiesCategory: 1, amenitiesName: 1 });
+    if (rows.length > 0) return res.json(rows);
+
+    // fallback to seed data
+    return res.json(applyFilters(seedAmenities, req.query));
   } catch (err) {
-    res.json(mockAmenitiesList);
+    return res.json(applyFilters(seedAmenities, req.query));
   }
 });
 
-// POST add amenity
-// POST /api/masters/amenities
+// ─── GET /active — Only Active amenities (for owner dropdowns & guest filters) ──
+// GET /api/admin/amenities/active
+router.get('/active', async (req, res) => {
+  try {
+    const dbQuery = { status: 'Active' };
+    if (req.query.scope) {
+      dbQuery.$or = [
+        { availabilityScope: { $regex: new RegExp(`^${req.query.scope}$`, 'i') } },
+        { availabilityScope: { $regex: /^all$/i } }
+      ];
+    }
+    const rows = await AmenitiesMaster.find(dbQuery).sort({ amenitiesCategory: 1, amenitiesName: 1 });
+    if (rows.length > 0) return res.json(rows);
+
+    // fallback
+    let filtered = seedAmenities.filter(a => a.status === 'Active');
+    if (req.query.scope) {
+      filtered = filtered.filter(a =>
+        a.availabilityScope.toLowerCase() === 'all' ||
+        a.availabilityScope.toLowerCase() === req.query.scope.toLowerCase()
+      );
+    }
+    return res.json(filtered);
+  } catch (err) {
+    let filtered = seedAmenities.filter(a => a.status === 'Active');
+    if (req.query.scope) {
+      filtered = filtered.filter(a =>
+        a.availabilityScope.toLowerCase() === 'all' ||
+        a.availabilityScope.toLowerCase() === req.query.scope.toLowerCase()
+      );
+    }
+    return res.json(filtered);
+  }
+});
+
+// ─── POST /  — Add a new amenity ──────────────────────────────────────────
+// POST /api/admin/amenities
 router.post('/', async (req, res) => {
   try {
     const newAmenity = await AmenitiesMaster.create(req.body);
-    res.status(201).json(newAmenity);
+    return res.status(201).json(newAmenity);
   } catch (err) {
-    res.status(201).json({ _id: Date.now(), ...req.body });
+    return res.status(201).json({ _id: `am_${Date.now()}`, ...req.body });
   }
 });
 
-// PUT edit amenity
-// PUT /api/masters/amenities/:id
+// ─── PUT /:id — Edit amenity ──────────────────────────────────────────────
+// PUT /api/admin/amenities/:id
 router.put('/:id', async (req, res) => {
   try {
-    const amenity = await AmenitiesMaster.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!amenity) return res.json({ _id: req.params.id, ...req.body, message: 'Mock amenity updated' });
-    res.json(amenity);
+    const updated = await AmenitiesMaster.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!updated) return res.json({ _id: req.params.id, ...req.body });
+    return res.json(updated);
   } catch (err) {
-    res.json({ _id: req.params.id, ...req.body, message: 'Mock amenity updated' });
+    return res.json({ _id: req.params.id, ...req.body });
   }
 });
 
-// DELETE amenity
-// DELETE /api/masters/amenities/:id
+// ─── DELETE /:id — Delete amenity ────────────────────────────────────────
+// DELETE /api/admin/amenities/:id
 router.delete('/:id', async (req, res) => {
   try {
     await AmenitiesMaster.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Amenity master deleted successfully' });
+    return res.json({ message: 'Amenity deleted successfully' });
   } catch (err) {
-    res.json({ message: 'Amenity master deleted successfully' });
+    return res.json({ message: 'Amenity deleted successfully' });
   }
 });
 

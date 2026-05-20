@@ -1,5 +1,6 @@
 import express from 'express';
 import CountryMaster from '../../models/CountryMaster.js';
+import StateMaster from '../../models/StateMaster.js';
 import { upload } from '../../middleware/upload.js';
 
 const router = express.Router();
@@ -22,6 +23,21 @@ router.get('/', async (req, res) => {
     res.json(results);
   } catch (err) {
     res.json(mockCountries);
+  }
+});
+
+// GET active countries for dropdowns
+router.get('/active', async (req, res) => {
+  try {
+    const activeCountries = await CountryMaster.find({ status: 'Active' }).sort({ countryName: 1 });
+    let results = activeCountries;
+
+    if (results.length === 0) {
+      results = mockCountries.filter(c => c.status === 'Active');
+    }
+    res.json(results);
+  } catch (err) {
+    res.json(mockCountries.filter(c => c.status === 'Active'));
   }
 });
 
@@ -57,10 +73,16 @@ router.put('/:id', upload.single('flagImage'), async (req, res) => {
 // DELETE country
 router.delete('/:id', async (req, res) => {
   try {
+    // Check if any states are associated with this country
+    const statesCount = await StateMaster.countDocuments({ countryId: req.params.id });
+    if (statesCount > 0) {
+      return res.status(400).json({ message: 'Cannot delete country because it has associated states.' });
+    }
+
     await CountryMaster.findByIdAndDelete(req.params.id);
     res.json({ message: 'Country master deleted successfully' });
   } catch (err) {
-    res.json({ message: 'Country master deleted successfully' });
+    res.status(500).json({ message: 'Error deleting country master' });
   }
 });
 

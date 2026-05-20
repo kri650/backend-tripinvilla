@@ -1,6 +1,7 @@
 import express from 'express';
 import Property from '../models/Property.js';
 import PropertyRequest from '../models/PropertyRequest.js';
+import PropertyLandmark from '../models/PropertyLandmark.js';
 import { protect, ownerOnly } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -177,6 +178,51 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
   }
 });
 
+// GET /api/properties/:id/landmarks
+router.get('/:id/landmarks', async (req, res) => {
+  try {
+    const landmarks = await PropertyLandmark.find({ property_id: req.params.id });
+    res.json(landmarks);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/properties/:id/landmarks
+router.post('/:id/landmarks', protect, ownerOnly, async (req, res) => {
+  try {
+    const property = await Property.findOne({ _id: req.params.id, owner: req.user._id });
+    if (!property) return res.status(404).json({ message: 'Property not found or access denied' });
+
+    const { landmark_name, landmark_type, landmark_image_url } = req.body;
+    const landmark = await PropertyLandmark.create({
+      property_id: req.params.id,
+      landmark_name,
+      landmark_type,
+      landmark_image_url: landmark_image_url || ''
+    });
+    res.status(201).json(landmark);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+// DELETE /api/properties/landmarks/:id
+router.delete('/landmarks/:id', protect, ownerOnly, async (req, res) => {
+  try {
+    const landmark = await PropertyLandmark.findById(req.params.id);
+    if (!landmark) return res.status(404).json({ message: 'Landmark not found' });
+    
+    const property = await Property.findOne({ _id: landmark.property_id, owner: req.user._id });
+    if (!property) return res.status(403).json({ message: 'Access denied' });
+
+    await landmark.deleteOne();
+    res.json({ message: 'Landmark deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET single property — /:id MUST come AFTER all named routes
 router.get('/:id', async (req, res) => {
   try {
@@ -198,12 +244,20 @@ router.post('/', protect, ownerOnly, async (req, res) => {
     if (body.price_per_night !== undefined) body.price = Number(body.price_per_night);
     if (body.bedrooms !== undefined) body.bedRooms = Number(body.bedrooms);
     if (body.address !== undefined) body.location = body.address;
+    
+    // Auto-extract city from location if not provided
+    if (!body.city && body.location) {
+      const parts = body.location.split(',');
+      body.city = parts[0].trim();
+    } else if (!body.city) {
+      body.city = 'Kasol';
+    }
 
     const propertyData = {
       propertyNo: `PR-${1000 + count + 1}`,
       owner: req.user._id,
-      status: body.status || 'Active',
-      ...body
+      ...body,
+      status: 'Pending' // Strictly force pending so it awaits admin approval
     };
     const property = await Property.create(propertyData);
 
@@ -244,6 +298,7 @@ router.put('/:id', protect, ownerOnly, async (req, res) => {
     
     // Map input fields for compatibility
     const body = { ...req.body };
+    delete body.status; // Prevent owner from bypassing admin approval via generic update
     if (body.price_per_night !== undefined) body.price = Number(body.price_per_night);
     if (body.bedrooms !== undefined) body.bedRooms = Number(body.bedrooms);
     if (body.address !== undefined) body.location = body.address;
@@ -272,11 +327,15 @@ router.put('/:id/status', protect, ownerOnly, async (req, res) => {
     if (!status || !['Active', 'Inactive', 'Inactive Admin', 'Pending'].includes(status)) {
       return res.status(400).json({ message: 'Valid status is required' });
     }
-    const property = await Property.findOneAndUpdate(
-      { _id: req.params.id, owner: req.user._id },
-      { status },
-      { new: true }
-    );
+    const property = await Property.findOne({ _id: req.params.id, owner: req.user._id });
+    if (!property) return res.status(404).json({ message: 'Property not found or access denied' });
+
+    if (status === 'Active' && (property.status === 'Pending' || property.status === 'Inactive Admin')) {
+      return res.status(403).json({ message: 'Property requires admin approval to become active.' });
+    }
+
+    property.status = status;
+    await property.save();
     if (!property) return res.status(404).json({ message: 'Property not found or access denied' });
     
     const responseObj = property.toObject();
@@ -298,11 +357,17 @@ router.delete('/:id', protect, ownerOnly, async (req, res) => {
   try {
     const property = await Property.findOneAndDelete({ _id: req.params.id, owner: req.user._id });
     if (!property) return res.status(404).json({ message: 'Property not found or access denied' });
+    
+    // Also delete any associated property requests!
+    await PropertyRequest.deleteMany({ property: req.params.id });
+    await PropertyLandmark.deleteMany({ property_id: req.params.id });
+    
     res.json({ message: 'Property deleted' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
 
 // POST /api/properties/ai-search — Natural language search using Gemini — BEFORE /:id
 router.post('/ai-search', async (req, res) => {
@@ -365,21 +430,16 @@ Only include fields that are clearly mentioned. If no city but a place is mentio
       const guestMatch = q.match(/(\d+)\s*(?:people|guests|persons|pax)/i);
       if (guestMatch) filters.guests = parseInt(guestMatch[1]);
 
-      // Detect common Indian destinations
       const indianCities = ['kasol', 'manali', 'shimla', 'goa', 'jaipur', 'udaipur', 'munnar', 'coorg', 
-        'ooty', 'rishikesh', 'nainital', 'alibaug', 'bangalore', 'mumbai', 'delhi', 'kolkata',
-        'darjeeling', 'mussoorie', 'kodaikanal', 'mahabaleshwar', 'lonavala', 'lavasa', 'pondicherry',
-        'kerala', 'himachal', 'rajasthan', 'uttarakhand', 'karnataka', 'maharashtra'];
+        'ooty', 'rishikesh', 'nainital', 'alibaug', 'bangalore', 'mumbai', 'delhi', 'kolkata'];
       const foundCity = indianCities.find(c => q.includes(c));
       if (foundCity) {
         filters.city = foundCity.charAt(0).toUpperCase() + foundCity.slice(1);
       } else {
-        // Extract the most meaningful word as search
         filters.search = query;
       }
     }
 
-    // Build MongoDB query from extracted filters
     const dbFilter = { status: 'Active' };
     if (filters.city) dbFilter.city = { $regex: filters.city, $options: 'i' };
     if (filters.state) dbFilter.state = { $regex: filters.state, $options: 'i' };
@@ -394,9 +454,7 @@ Only include fields that are clearly mentioned. If no city but a place is mentio
       dbFilter.$or = [
         { name: { $regex: filters.search, $options: 'i' } },
         { location: { $regex: filters.search, $options: 'i' } },
-        { city: { $regex: filters.search, $options: 'i' } },
-        { state: { $regex: filters.search, $options: 'i' } },
-        { description: { $regex: filters.search, $options: 'i' } }
+        { city: { $regex: filters.search, $options: 'i' } }
       ];
     }
 
@@ -413,9 +471,7 @@ Only include fields that are clearly mentioned. If no city but a place is mentio
       guests: p.capacity,
       rating: p.rating,
       status: p.status,
-      hasActiveOffer: p.hasActiveOffer,
-      description: p.description,
-      amenities: p.amenities
+      hasActiveOffer: p.hasActiveOffer
     }));
 
     res.json({
@@ -425,10 +481,8 @@ Only include fields that are clearly mentioned. If no city but a place is mentio
       aiPowered: !!geminiKey
     });
   } catch (err) {
-    console.error('AI Search error:', err);
     res.status(500).json({ message: 'AI search failed', error: err.message });
   }
 });
 
 export default router;
-
