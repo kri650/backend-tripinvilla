@@ -1,6 +1,7 @@
 import express from 'express';
 import PropertyReview from '../models/PropertyReview.js';
 import Property from '../models/Property.js';
+import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -39,8 +40,8 @@ router.get('/:property_id', async (req, res) => {
   }
 });
 
-// POST /api/reviews/:property_id -> Guest submits review (public)
-router.post('/:property_id', async (req, res) => {
+// POST /api/reviews/:property_id -> Verified user submits review (requires login)
+router.post('/:property_id', protect, async (req, res) => {
   try {
     const property = await Property.findById(req.params.property_id);
     if (!property) return res.status(404).json({ message: 'Property not found' });

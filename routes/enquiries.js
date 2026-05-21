@@ -42,6 +42,27 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
   }
 });
 
+// GET logged-in user's own enquiries
+// GET /api/enquiries/user
+router.get('/user', protect, async (req, res) => {
+  try {
+    const enquiries = await Enquiry.find({ user_id: req.user._id })
+      .populate('property_id', 'name location images')
+      .sort({ createdAt: -1 });
+
+    const formatted = enquiries.map((e, idx) => ({
+      ...e.toObject(),
+      id: e._id,
+      enquiryNo: `ENQ-${4000 + enquiries.length - idx}`,
+      propertyName: e.property_id?.name || e.propertyName || 'Property Enquiry',
+    }));
+
+    res.json(formatted);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET owner's enquiries with filter options
 // GET /api/enquiries/owner/filter
 router.get('/owner/filter', protect, ownerOnly, async (req, res) => {
