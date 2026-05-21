@@ -8,7 +8,7 @@ import { dirname, join } from 'path';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8000;
 
 // Middleware
 const allowedOrigins = [
