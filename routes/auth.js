@@ -86,7 +86,7 @@ router.post('/login', async (req, res) => {
 // GET all admins
 router.get('/admins', async (req, res) => {
   try {
-    const users = await User.find().select('-password');
+    const users = await User.find({ role: { $in: ['admin', 'super_admin'] } }).select('-password');
     if (users.length === 0) {
       return res.json([
         { _id: 1, name: 'Rajesh Kumar', email: 'rajesh@tripinvilla.com', role: 'Super Admin', lastLogin: '11 May 2026', status: 'Active' },

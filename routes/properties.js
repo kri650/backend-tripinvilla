@@ -254,10 +254,26 @@ router.post('/', protect, ownerOnly, async (req, res) => {
       body.city = 'Kasol';
     }
 
+    let ownerId = req.user._id;
+    let ownerName = req.user.name;
+    let ownerContact = req.user.phone || req.user.email || 'N/A';
+
+    const isAdmin = ['admin', 'super_admin'].includes(req.user.role);
+    if (isAdmin && (body.owner || body.ownerId)) {
+      const targetOwnerId = body.owner || body.ownerId;
+      ownerId = targetOwnerId;
+      const User = (await import('../models/User.js')).default;
+      const ownerUser = await User.findById(targetOwnerId);
+      if (ownerUser) {
+        ownerName = ownerUser.name;
+        ownerContact = ownerUser.phone || ownerUser.email || 'N/A';
+      }
+    }
+
     const propertyData = {
       propertyNo: `PR-${1000 + count + 1}`,
-      owner: req.user._id,
       ...body,
+      owner: ownerId,
       status: 'Pending' // Strictly force pending so it awaits admin approval
     };
     const property = await Property.create(propertyData);
@@ -270,8 +286,8 @@ router.post('/', protect, ownerOnly, async (req, res) => {
       propertyName: property.name,
       location: property.location,
       category: property.type,
-      ownerName: req.user.name,
-      ownerContact: req.user.phone || req.user.email || 'N/A',
+      ownerName: ownerName,
+      ownerContact: ownerContact,
       priceByOwner: property.price,
       property: property._id,
       status: 'NotAccepted'
@@ -294,7 +310,9 @@ router.post('/', protect, ownerOnly, async (req, res) => {
 // PUT update
 router.put('/:id', protect, ownerOnly, async (req, res) => {
   try {
-    const property = await Property.findOne({ _id: req.params.id, owner: req.user._id });
+    const isAdmin = ['admin', 'super_admin'].includes(req.user?.role);
+    const query = isAdmin ? { _id: req.params.id } : { _id: req.params.id, owner: req.user._id };
+    const property = await Property.findOne(query);
     if (!property) return res.status(404).json({ message: 'Property not found or access denied' });
     
     // Map input fields for compatibility
@@ -328,16 +346,17 @@ router.put('/:id/status', protect, ownerOnly, async (req, res) => {
     if (!status || !['Active', 'Inactive', 'Inactive Admin', 'Pending'].includes(status)) {
       return res.status(400).json({ message: 'Valid status is required' });
     }
-    const property = await Property.findOne({ _id: req.params.id, owner: req.user._id });
+    const isAdmin = ['admin', 'super_admin'].includes(req.user?.role);
+    const query = isAdmin ? { _id: req.params.id } : { _id: req.params.id, owner: req.user._id };
+    const property = await Property.findOne(query);
     if (!property) return res.status(404).json({ message: 'Property not found or access denied' });
 
-    if (status === 'Active' && (property.status === 'Pending' || property.status === 'Inactive Admin')) {
+    if (status === 'Active' && !isAdmin && (property.status === 'Pending' || property.status === 'Inactive Admin')) {
       return res.status(403).json({ message: 'Property requires admin approval to become active.' });
     }
 
     property.status = status;
     await property.save();
-    if (!property) return res.status(404).json({ message: 'Property not found or access denied' });
     
     const responseObj = property.toObject();
     res.json({
@@ -356,7 +375,9 @@ router.put('/:id/status', protect, ownerOnly, async (req, res) => {
 // DELETE
 router.delete('/:id', protect, ownerOnly, async (req, res) => {
   try {
-    const property = await Property.findOneAndDelete({ _id: req.params.id, owner: req.user._id });
+    const isAdmin = ['admin', 'super_admin'].includes(req.user?.role);
+    const query = isAdmin ? { _id: req.params.id } : { _id: req.params.id, owner: req.user._id };
+    const property = await Property.findOneAndDelete(query);
     if (!property) return res.status(404).json({ message: 'Property not found or access denied' });
     
     // Also delete any associated property requests!

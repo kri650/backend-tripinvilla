@@ -14,12 +14,18 @@ const router = express.Router();
 // GET /api/enquiries/owner
 router.get('/owner', protect, ownerOnly, async (req, res) => {
   try {
-    const properties = await Property.find({ owner: req.user._id }).select('_id');
-    const propertyIds = properties.map(p => p._id);
-
-    const enquiries = await Enquiry.find({ property_id: { $in: propertyIds } })
-      .populate('property_id', 'name location city type')
-      .sort({ createdAt: -1 });
+    let enquiries;
+    if (['admin', 'super_admin'].includes(req.user?.role)) {
+      enquiries = await Enquiry.find()
+        .populate('property_id', 'name location city type')
+        .sort({ createdAt: -1 });
+    } else {
+      const properties = await Property.find({ owner: req.user._id }).select('_id');
+      const propertyIds = properties.map(p => p._id);
+      enquiries = await Enquiry.find({ property_id: { $in: propertyIds } })
+        .populate('property_id', 'name location city type')
+        .sort({ createdAt: -1 });
+    }
 
     const formatted = enquiries.map((e, idx) => {
       const obj = e.toObject();
@@ -46,7 +52,12 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
 // GET /api/enquiries/user
 router.get('/user', protect, async (req, res) => {
   try {
-    const enquiries = await Enquiry.find({ user_id: req.user._id })
+    const emailQuery = req.user.email ? { email: { $regex: new RegExp(`^${req.user.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } } : null;
+    const searchFilter = emailQuery 
+      ? { $or: [ { user_id: req.user._id }, emailQuery ] } 
+      : { user_id: req.user._id };
+
+    const enquiries = await Enquiry.find(searchFilter)
       .populate('property_id', 'name location images')
       .sort({ createdAt: -1 });
 
@@ -69,7 +80,10 @@ router.get('/owner/filter', protect, ownerOnly, async (req, res) => {
   try {
     const { date_from, date_to, property_type, location, search } = req.query;
 
-    const propertyFilter = { owner: req.user._id };
+    const propertyFilter = {};
+    if (!['admin', 'super_admin'].includes(req.user?.role)) {
+      propertyFilter.owner = req.user._id;
+    }
     if (property_type) {
       propertyFilter.type = property_type;
     }
