@@ -14,7 +14,10 @@ const PORT = process.env.PORT || 8000;
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
-  'http://localhost:5175'
+  'http://localhost:5175',
+  'http://13.127.196.228:5174',
+  'http://13.127.196.228:5173',
+  'http://13.127.196.228:8000',
 ];
 app.use(cors({
   origin: (origin, callback) => {
@@ -62,6 +65,7 @@ import ownerDashboardRouter from './routes/ownerDashboard.js';
 import propertyRequestRoutes from './routes/propertyRequests.js';
 import cityRoutes from './routes/cities.js';
 import ownerRoutes from './routes/owners.js';
+import contentRoutes from './routes/content.js';
 import offerRoutes from './routes/offers.js';
 import userRoutes from './routes/users.js';
 import bookingRoutes from './routes/bookings.js';
@@ -75,6 +79,8 @@ import destinationMasterRoutes from './routes/master/destinations.js';
 import experienceMasterRoutes from './routes/master/experiences.js';
 import amenitiesMasterRoutes from './routes/master/amenities.js';
 import pricingRuleRoutes from './routes/pricingRules.js';
+import subscriptionRoutes from './routes/subscription.js';
+import searchRoutes from './routes/searchRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -86,8 +92,10 @@ app.use('/api/enquiries', enquiryRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/owner-dashboard', ownerDashboardRouter);
 app.use('/api/property-requests', propertyRequestRoutes);
+app.use('/api/search', searchRoutes);
 app.use('/api/cities', cityRoutes);
 app.use('/api/owners', ownerRoutes);
+app.use('/api/content', contentRoutes);
 app.use('/api/offers', offerRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/bookings', bookingRoutes);
@@ -107,14 +115,14 @@ app.use('/api/reviews', reviewsRouter);
 app.use('/api/master/destinations', destinationMasterRoutes);
 app.use('/api/master/experiences', experienceMasterRoutes);
 app.use('/api/admin/amenities', amenitiesMasterRoutes);
+app.use('/api/master/landmarks', landmarkMasterRoutes);
 app.use('/api/master/amenities', amenitiesMasterRoutes);
-app.use('/api/masters/destinations', destinationMasterRoutes);
-app.use('/api/masters/experiences', experienceMasterRoutes);
-app.use('/api/masters/amenities', amenitiesMasterRoutes);
+app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/masters/countries', countryMasterRoutes);
 app.use('/api/masters/states', stateMasterRoutes);
 app.use('/api/masters/cities', cityMasterRoutes);
 app.use('/api/masters/locations', locationMasterRoutes);
+app.use('/api/masters/destinations', destinationMasterRoutes);
 app.use('/api/admin/experiences', experienceMasterRoutes);
 app.use('/api/pricing-rules', pricingRuleRoutes);
 
