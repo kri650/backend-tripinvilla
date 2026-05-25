@@ -30,6 +30,18 @@ router.get('/rating/:property_id', async (req, res) => {
   }
 });
 
+// GET /api/reviews/user/me -> Fetch all reviews posted by the logged-in user
+router.get('/user/me', protect, async (req, res) => {
+  try {
+    const reviews = await PropertyReview.find({ user_id: req.user._id })
+      .populate('property_id', 'name location city type images')
+      .sort({ createdAt: -1 });
+    res.json(reviews);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/reviews/:property_id -> Fetch all reviews for property
 router.get('/:property_id', async (req, res) => {
   try {
@@ -54,6 +66,7 @@ router.post('/:property_id', protect, async (req, res) => {
 
     const review = await PropertyReview.create({
       property_id: req.params.property_id,
+      user_id: req.user._id,
       reviewer_name,
       reviewer_photo_url: reviewer_photo_url || '',
       rating: Number(rating),

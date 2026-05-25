@@ -22,7 +22,7 @@ router.get('/', protect, adminOnly, async (req, res) => {
     let formattedRequests = requestsDb.map(r => ({
       _id: r._id,
       requestNo: r.requestNo,
-      image: r.image || (r.property?.images && r.property.images[0]) || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60',
+      image: r.room_image_url || r.image || (r.property?.images && r.property.images[0]) || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60',
       propertyName: r.property?.name || r.propertyName,
       location: r.property?.location || r.location,
       category: r.property?.type || r.category,
@@ -31,7 +31,19 @@ router.get('/', protect, adminOnly, async (req, res) => {
       priceByOwner: r.price_per_room || r.priceByOwner,
       about: r.property?.description || '',
       status: r.admin_status === 'approved' ? 'Accepted' : (r.admin_status === 'rejected' ? 'Rejected' : 'NotAccepted'),
-      createdAt: r.createdAt
+      createdAt: r.createdAt,
+      // Full room details
+      room_type: r.room_type,
+      bed_type: r.bed_type,
+      amenities_types: r.amenities_types || [],
+      original_price: r.original_price,
+      price_per_room: r.price_per_room,
+      checkin_time: r.checkin_time,
+      checkout_time: r.checkout_time,
+      offers: r.offers || [],
+      rules: r.rules,
+      room_image_url: r.room_image_url,
+      property_id: r.property?._id || r.property_id
     }));
 
     res.json({
@@ -97,7 +109,12 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
     const properties = await Property.find({ owner: req.user._id }).select('_id');
     const propertyIds = properties.map(p => p._id);
     
-    const requests = await PropertyRequest.find({ property: { $in: propertyIds } })
+    const requests = await PropertyRequest.find({
+      $or: [
+        { property: { $in: propertyIds } },
+        { property_id: { $in: propertyIds } }
+      ]
+    })
       .populate('property', 'name location city type images')
       .sort({ createdAt: -1 });
       
@@ -131,8 +148,12 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
 // GET /api/property-requests/property/:propertyId -> Public approved rooms for a property
 router.get('/property/:propertyId', async (req, res) => {
   try {
+    // Query both property and property_id fields for compatibility
     const requests = await PropertyRequest.find({
-      property: req.params.propertyId,
+      $or: [
+        { property: req.params.propertyId },
+        { property_id: req.params.propertyId }
+      ],
       admin_status: 'approved'
     }).populate('property', 'images');
     const formatted = requests.map(r => ({

@@ -39,7 +39,45 @@ const propertySchema = new mongoose.Schema({
     freeCancellationHours: { type: String, default: '24' },
     parkingAvailable: { type: Boolean, default: false },
   },
-  experiences: [{ type: String }],
+  experiences: [{ type: mongoose.Schema.Types.ObjectId, ref: 'ExperienceMaster' }],
+  
+  // --- Type-Specific Details ---
+  // Villa specific
+  privatePool: { type: Boolean, default: false },
+  gardenArea: { type: Boolean, default: false },
+  chefAvailable: { type: Boolean, default: false },
+  entirePropertyOnly: { type: Boolean, default: false },
+  securityCCTV: { type: Boolean, default: false },
+  numberOfFloors: { type: String },
+  plotSize: { type: String },
+  
+  // Resort/Hotel specific
+  restaurantOnSite: { type: Boolean, default: false },
+  spaWellness: { type: Boolean, default: false },
+  conferenceRoom: { type: Boolean, default: false },
+  roomService: { type: Boolean, default: false },
+  receptionAllDay: { type: Boolean, default: false },
+  liftElevator: { type: Boolean, default: false },
+  starRating: { type: String },
+  totalRooms: { type: String },
+  totalFloors: { type: String },
+  activities: [{ type: String }],
+  
+  // Apartment specific
+  floorNumber: { type: String },
+  totalFloorsBuilding: { type: String },
+  furnishedStatus: { type: String, default: 'Fully Furnished' },
+  washingMachine: { type: Boolean, default: false },
+  societyAmenities: [{ type: String }],
+  
+  // Cottage specific
+  bonfireArea: { type: Boolean, default: false },
+  viewType: { type: String, default: 'Mountain' },
+  outdoorSeating: { type: Boolean, default: false },
+  nearestHikingTrail: { type: String },
+  distanceFromCity: { type: String },
+  // -----------------------------
+
   rules: { type: String, default: '• Primary Guest should be atleast 18 years of age.\n• Passport, Aadhaar, Driving License and Govt. ID are accepted as ID proof(s).' },
   area: { type: String, default: '31 sq. ft.' },
   beds: { type: Number, default: 2 },
@@ -48,6 +86,26 @@ const propertySchema = new mongoose.Schema({
   totalBookings: { type: Number, default: 0 },
   hasActiveOffer: { type: Boolean, default: false },
   owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+
+  // --- Priority (Set automatically by Subscription) ---
+  priority: { type: Number, default: 0 },
+  // --- Search Engine specific ---
+  foodPreference: { type: String, enum: ["veg", "non-veg", "both", "none"], default: "none" },
+  bookedDates: [{ checkIn: Date, checkOut: Date }],
+  isVerified: { type: Boolean, default: false },
+  isFeatured: { type: Boolean, default: false },
+
 }, { timestamps: true });
+
+// --- Index for fast sorted queries ---
+propertySchema.index({ priority: -1, createdAt: -1 });
+propertySchema.index({ city: 1, priority: -1 });
+propertySchema.index({ type: 1, priority: -1 });
+
+// --- Text index for keyword / AI search ---
+propertySchema.index(
+  { name: "text", description: "text", city: "text", state: "text" },
+  { weights: { name: 10, city: 8, description: 3 } }
+);
 
 export default mongoose.model('Property', propertySchema);

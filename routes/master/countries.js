@@ -16,10 +16,9 @@ router.get('/', async (req, res) => {
   try {
     const countriesDb = await CountryMaster.find().sort({ countryName: 1 });
     let results = countriesDb;
-
-    if (results.length === 0) {
-      results = mockCountries;
-    }
+    const dbNames = results.map(r => (r.countryName || '').toLowerCase());
+    const missingMocks = mockCountries.filter(m => !dbNames.includes((m.countryName || '').toLowerCase()));
+    results = [...results, ...missingMocks];
     res.json(results);
   } catch (err) {
     res.json(mockCountries);
@@ -31,10 +30,9 @@ router.get('/active', async (req, res) => {
   try {
     const activeCountries = await CountryMaster.find({ status: 'Active' }).sort({ countryName: 1 });
     let results = activeCountries;
-
-    if (results.length === 0) {
-      results = mockCountries.filter(c => c.status === 'Active');
-    }
+    const dbNames = results.map(r => (r.countryName || '').toLowerCase());
+    const missingMocks = mockCountries.filter(m => m.status === 'Active' && !dbNames.includes((m.countryName || '').toLowerCase()));
+    results = [...results, ...missingMocks];
     res.json(results);
   } catch (err) {
     res.json(mockCountries.filter(c => c.status === 'Active'));

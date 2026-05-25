@@ -44,8 +44,10 @@ router.get('/active', async (req, res) => {
       status: c.status
     }));
 
-    if (results.length === 0 && (!req.query.state_id || req.query.state_id === 'All')) {
-      results = mockCityMasters.filter(c => c.status === 'Active');
+    if (!req.query.state_id || req.query.state_id === 'All') {
+      const dbNames = results.map(r => (r.cityName || '').toLowerCase());
+      const missingMocks = mockCityMasters.filter(m => m.status === 'Active' && !dbNames.includes((m.cityName || '').toLowerCase()));
+      results = [...results, ...missingMocks];
     }
     res.json(results);
   } catch (err) {
@@ -79,8 +81,10 @@ router.get('/', async (req, res) => {
       });
     }
 
-    if (results.length === 0 && (!req.query.state_id || req.query.state_id === 'All')) {
-      results = mockCityMasters;
+    if (!req.query.state_id || req.query.state_id === 'All') {
+      const dbNames = results.map(r => (r.cityName || '').toLowerCase());
+      const missingMocks = mockCityMasters.filter(m => !dbNames.includes((m.cityName || '').toLowerCase()));
+      results = [...results, ...missingMocks];
     }
 
     res.json(results);

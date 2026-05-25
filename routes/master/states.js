@@ -39,8 +39,10 @@ router.get('/', async (req, res) => {
       });
     }
 
-    if (results.length === 0 && !req.query.country_id) {
-      results = mockStates;
+    if (!req.query.country_id) {
+      const dbNames = results.map(r => (r.stateName || '').toLowerCase());
+      const missingMocks = mockStates.filter(m => !dbNames.includes((m.stateName || '').toLowerCase()));
+      results = [...results, ...missingMocks];
     }
 
     res.json(results);
@@ -65,8 +67,10 @@ router.get('/active', async (req, res) => {
       status: st.status
     }));
 
-    if (results.length === 0 && !req.query.country_id) {
-      results = mockStates.filter(s => s.status === 'Active');
+    if (!req.query.country_id) {
+      const dbNames = results.map(r => (r.stateName || '').toLowerCase());
+      const missingMocks = mockStates.filter(m => m.status === 'Active' && !dbNames.includes((m.stateName || '').toLowerCase()));
+      results = [...results, ...missingMocks];
     }
     res.json(results);
   } catch (err) {

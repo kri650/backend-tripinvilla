@@ -6,9 +6,12 @@ import { upload } from '../../middleware/upload.js';
 const router = express.Router();
 
 const mockDestinations = [
-  { _id: "dm1", destinationName: "Goa", stateName: "Goa", countryName: "India", coverImageUrl: "https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=500&auto=format&fit=crop&q=60", propertyTypesOffered: ["Villa", "Hotel", "Resort"], description: "Sun, sand and heritage Portuguese villas.", propertiesCount: 64, status: "Active" },
-  { _id: "dm2", destinationName: "Kasol", stateName: "Himachal Pradesh", countryName: "India", coverImageUrl: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60", propertyTypesOffered: ["Homestay", "Cottage"], description: "Peaceful valleys and riverside woodhouses.", propertiesCount: 28, status: "Active" },
-  { _id: "dm3", destinationName: "Coorg", stateName: "Karnataka", countryName: "India", coverImageUrl: "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=500&auto=format&fit=crop&q=60", propertyTypesOffered: ["Resort", "Homestay", "Villa"], description: "Lush coffee plantations and pristine misty hills.", propertiesCount: 45, status: "Active" }
+  { _id: "dm1", destinationName: "Mumbai", stateName: "Maharashtra", countryName: "India", coverImageUrl: "https://images.unsplash.com/photo-1570168007204-dfb528c6958f?auto=format&fit=crop&w=400&q=80", propertyTypesOffered: ["Villa", "Apartment"], description: "The city of dreams.", propertiesCount: 45, status: "Active" },
+  { _id: "dm2", destinationName: "Goa", stateName: "Goa", countryName: "India", coverImageUrl: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=400&q=80", propertyTypesOffered: ["Villa", "Hotel", "Resort"], description: "Sun, sand and heritage Portuguese villas.", propertiesCount: 64, status: "Active" },
+  { _id: "dm3", destinationName: "Delhi", stateName: "Delhi", countryName: "India", coverImageUrl: "https://images.unsplash.com/photo-1587474260584-136574528ed5?auto=format&fit=crop&w=400&q=80", propertyTypesOffered: ["Hotel", "Homestay"], description: "Historical monuments and vibrant markets.", propertiesCount: 89, status: "Active" },
+  { _id: "dm4", destinationName: "Manali", stateName: "Himachal Pradesh", countryName: "India", coverImageUrl: "https://images.unsplash.com/photo-1499793983690-e29da59ef1c2?auto=format&fit=crop&w=400&q=80", propertyTypesOffered: ["Cottage", "Homestay", "Resort"], description: "Snow-capped mountains and adventure sports.", propertiesCount: 52, status: "Active" },
+  { _id: "dm5", destinationName: "Kasol", stateName: "Himachal Pradesh", countryName: "India", coverImageUrl: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=400&q=80", propertyTypesOffered: ["Homestay", "Cottage"], description: "Peaceful valleys and riverside woodhouses.", propertiesCount: 28, status: "Active" },
+  { _id: "dm6", destinationName: "Mukteswar", stateName: "Uttarakhand", countryName: "India", coverImageUrl: "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=80", propertyTypesOffered: ["Resort", "Homestay"], description: "Breathtaking Himalayan views and fruit orchards.", propertiesCount: 15, status: "Active" }
 ];
 
 // GET all destinations with auto-calculated property counts
@@ -35,9 +38,9 @@ router.get('/', async (req, res) => {
       });
     }
 
-    if (results.length === 0) {
-      results = mockDestinations;
-    }
+    const dbNames = results.map(r => (r.destinationName || '').toLowerCase());
+    const missingMocks = mockDestinations.filter(m => !dbNames.includes((m.destinationName || '').toLowerCase()));
+    results = [...results, ...missingMocks];
 
     res.json(results);
   } catch (err) {

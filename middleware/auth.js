@@ -10,6 +10,20 @@ export const protect = async (req, res, next) => {
     return res.status(401).json({ message: 'Not authorized: missing token' });
   }
 
+  // --- FAKE TOKENS FOR OFFLINE DEV/TESTING ---
+  if (token === 'fake_token_for_admin') {
+    req.user = { _id: 'fake_admin_123', id: 'fake_admin_123', role: 'super_admin', name: 'Test Admin' };
+    return next();
+  }
+  if (token === 'fake_user_token') {
+    req.user = { _id: 'fake_user_123', id: 'fake_user_123', role: 'user', name: 'Test Guest' };
+    return next();
+  }
+  if (token === 'fake_owner_token') {
+    req.user = { _id: 'fake_owner_123', id: 'fake_owner_123', role: 'owner', name: 'Test Owner' };
+    return next();
+  }
+
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 

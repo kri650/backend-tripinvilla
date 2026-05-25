@@ -35,9 +35,9 @@ router.get('/', async (req, res) => {
       aboutLocation: l.aboutLocation
     }));
 
-    if (results.length === 0) {
-      results = mockLocations;
-    }
+    const dbNames = results.map(r => (r.locationName || '').toLowerCase());
+    const missingMocks = mockLocations.filter(m => !dbNames.includes((m.locationName || '').toLowerCase()));
+    results = [...results, ...missingMocks];
     res.json(results);
   } catch (err) {
     res.json(mockLocations);
@@ -58,9 +58,9 @@ router.get('/active', async (req, res) => {
       aboutLocation: l.aboutLocation
     }));
 
-    if (results.length === 0) {
-      results = mockLocations.filter(l => l.status === 'Active');
-    }
+    const dbNames = results.map(r => (r.locationName || '').toLowerCase());
+    const missingMocks = mockLocations.filter(m => m.status === 'Active' && !dbNames.includes((m.locationName || '').toLowerCase()));
+    results = [...results, ...missingMocks];
     res.json(results);
   } catch (err) {
     res.json(mockLocations.filter(l => l.status === 'Active'));

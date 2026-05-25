@@ -24,6 +24,15 @@ const userSchema = new mongoose.Schema({
   emergencyEmail: { type: String },
   isBlacklisted: { type: Boolean, default: false },
   isPremium: { type: Boolean, default: false },
+  subscription: {
+    isActive: { type: Boolean, default: false },
+    plan: { type: String, default: null },
+    expiresAt: { type: Date, default: null },
+    razorpayOrderId: { type: String, default: null },
+    razorpayPaymentId: { type: String, default: null },
+    razorpaySignature: { type: String, default: null },
+    history: []
+  },
   lastLogin: { type: Date },
   status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
   wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Property' }],

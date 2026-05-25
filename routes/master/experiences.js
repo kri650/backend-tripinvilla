@@ -1,14 +1,15 @@
 import express from 'express';
 import ExperienceMaster from '../../models/ExperienceMaster.js';
 import PropertyExperienceTag from '../../models/PropertyExperienceTag.js';
+import Property from '../../models/Property.js';
 import { upload } from '../../middleware/upload.js';
 
 const router = express.Router();
 
 const mockExperiences = [
-  { _id: "exp1", experienceName: "Jungle Stay", representingIcon: "TreePine", themeCoverImageUrl: "https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=500&auto=format&fit=crop&q=60", description: "Immersive nature retreats surrounded by lush wild forest canopy.", propertiesCount: 24, status: "Active" },
-  { _id: "exp2", experienceName: "Beachfront", representingIcon: "Umbrella", themeCoverImageUrl: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500&auto=format&fit=crop&q=60", description: "Wake up to soothing ocean waves and walk right onto golden sands.", propertiesCount: 42, status: "Active" },
-  { _id: "exp3", experienceName: "Mountain View", representingIcon: "Mountain", themeCoverImageUrl: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=500&auto=format&fit=crop&q=60", description: "High altitude panoramic stays amidst snowy peaks and crisp mountain air.", propertiesCount: 35, status: "Active" }
+  { _id: "6a0e00000000000000000001", experienceName: "Jungle Stay", representingIcon: "TreePine", themeCoverImageUrl: "https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=500&auto=format&fit=crop&q=60", description: "Immersive nature retreats surrounded by lush wild forest canopy.", propertiesCount: 24, status: "Active" },
+  { _id: "6a0e00000000000000000002", experienceName: "Beachfront", representingIcon: "Umbrella", themeCoverImageUrl: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500&auto=format&fit=crop&q=60", description: "Wake up to soothing ocean waves and walk right onto golden sands.", propertiesCount: 42, status: "Active" },
+  { _id: "6a0e00000000000000000003", experienceName: "Mountain View", representingIcon: "Mountain", themeCoverImageUrl: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=500&auto=format&fit=crop&q=60", description: "High altitude panoramic stays amidst snowy peaks and crisp mountain air.", propertiesCount: 35, status: "Active" }
 ];
 
 // GET active experiences for frontend tab
@@ -18,24 +19,32 @@ router.get('/active', async (req, res) => {
     let results = [];
 
     for (const exp of experiencesDb) {
-      const count = await PropertyExperienceTag.countDocuments({ experienceId: exp._id });
+      const count = await Property.countDocuments({
+        $or: [
+          { experiences: exp._id },
+          { experiences: exp.experienceName }
+        ]
+      });
       results.push({
         _id: exp._id,
-        name: exp.experienceName,
-        icon: exp.representingIcon || 'TreePine',
-        cover_image_url: exp.themeCoverImageUrl,
+        experienceName: exp.experienceName,
+        representingIcon: exp.representingIcon || 'TreePine',
+        themeCoverImageUrl: exp.themeCoverImageUrl,
         description: exp.description,
         propertiesCount: count,
         status: exp.status
       });
     }
 
-    if (results.length === 0) {
-      results = mockExperiences.filter(e => e.status === 'Active').map(e => ({
-        _id: e._id, name: e.experienceName, icon: e.representingIcon, cover_image_url: e.themeCoverImageUrl, description: e.description, propertiesCount: e.propertiesCount, status: e.status
-      }));
+    const dbIds = results.map(r => r._id.toString());
+    const mergedResults = [...results];
+    for (const mock of mockExperiences) {
+      if (!dbIds.includes(mock._id.toString()) && mock.status === 'Active') {
+        mergedResults.push(mock);
+      }
     }
-    res.json(results);
+
+    res.json(mergedResults);
   } catch (err) {
     res.json(mockExperiences.filter(e => e.status === 'Active'));
   }
@@ -48,7 +57,12 @@ router.get('/', async (req, res) => {
     let results = [];
 
     for (const exp of experiencesDb) {
-      const count = await PropertyExperienceTag.countDocuments({ experienceId: exp._id });
+      const count = await Property.countDocuments({
+        $or: [
+          { experiences: exp._id },
+          { experiences: exp.experienceName }
+        ]
+      });
       results.push({
         _id: exp._id,
         experienceName: exp.experienceName,
@@ -60,11 +74,15 @@ router.get('/', async (req, res) => {
       });
     }
 
-    if (results.length === 0) {
-      results = mockExperiences;
+    const dbIds = results.map(r => r._id.toString());
+    const mergedResults = [...results];
+    for (const mock of mockExperiences) {
+      if (!dbIds.includes(mock._id.toString())) {
+        mergedResults.push(mock);
+      }
     }
 
-    res.json(results);
+    res.json(mergedResults);
   } catch (err) {
     res.json(mockExperiences);
   }

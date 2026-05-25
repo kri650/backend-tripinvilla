@@ -12,6 +12,43 @@ const mockCitiesList = [
   { _id: "city5", cityName: "Bangalore", stateName: "Karnataka", totalProperties: 50, homestays: 12, resorts: 6, villas: 8, apartments: 22, cottages: 1, others: 1 }
 ];
 
+// GET /api/cities/analytics
+router.get('/analytics', async (req, res) => {
+  try {
+    const aggregations = await Property.aggregate([
+      { 
+        $group: { 
+          _id: { city: "$city", state: "$state" }, 
+          total: { $sum: 1 },
+          homestays: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Homestay"] }, { $eq: ["$category", "Homestay"] }] }, 1, 0] }},
+          resorts: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Resort"] }, { $eq: ["$category", "Resort"] }] }, 1, 0] }},
+          villas: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Villa"] }, { $eq: ["$category", "Villa"] }] }, 1, 0] }},
+          apartments: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Apartment"] }, { $eq: ["$category", "Apartment"] }] }, 1, 0] }},
+          cottages: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Cottage"] }, { $eq: ["$category", "Cottage"] }] }, 1, 0] }},
+          others: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Farmhouse"] }, { $eq: ["$category", "Others"] }] }, 1, 0] }}
+        }
+      }
+    ]);
+
+    const result = aggregations.map(agg => ({
+      _id: agg._id.city || "Unknown",
+      cityName: agg._id.city || "Unknown",
+      stateName: agg._id.state || "Unknown",
+      totalProperties: agg.total,
+      homestays: agg.homestays,
+      resorts: agg.resorts,
+      villas: agg.villas,
+      apartments: agg.apartments,
+      cottages: agg.cottages,
+      others: agg.others
+    })).filter(a => a.cityName !== "Unknown");
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET all cities with property breakdown aggregation
 // GET /api/cities
 router.get('/', async (req, res) => {

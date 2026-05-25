@@ -1,5 +1,6 @@
 import express from 'express';
 import AmenitiesMaster from '../../models/AmenitiesMaster.js';
+import Property from '../../models/Property.js';
 
 const router = express.Router();
 
@@ -53,10 +54,23 @@ router.get('/', async (req, res) => {
     if (req.query.status) dbQuery.status = { $regex: new RegExp(`^${req.query.status}$`, 'i') };
 
     const rows = await AmenitiesMaster.find(dbQuery).sort({ amenitiesCategory: 1, amenitiesName: 1 });
-    if (rows.length > 0) return res.json(rows);
+    
+    let baseAmenities = [...rows];
+    const dbNames = baseAmenities.map(r => (r.amenitiesName || '').toLowerCase());
+    const missingMocks = applyFilters(seedAmenities, req.query).filter(m => !dbNames.includes((m.amenitiesName || '').toLowerCase()));
+    baseAmenities = [...baseAmenities, ...missingMocks];
 
-    // fallback to seed data
-    return res.json(applyFilters(seedAmenities, req.query));
+    const result = await Promise.all(
+      baseAmenities.map(async (a) => {
+        const count = await Property.countDocuments({
+          amenities: { $in: [a.amenitiesName] }
+        });
+        const obj = typeof a.toObject === 'function' ? a.toObject() : a;
+        return { ...obj, propertiesCount: count };
+      })
+    );
+
+    return res.json(result);
   } catch (err) {
     return res.json(applyFilters(seedAmenities, req.query));
   }
@@ -74,17 +88,16 @@ router.get('/active', async (req, res) => {
       ];
     }
     const rows = await AmenitiesMaster.find(dbQuery).sort({ amenitiesCategory: 1, amenitiesName: 1 });
-    if (rows.length > 0) return res.json(rows);
-
-    // fallback
-    let filtered = seedAmenities.filter(a => a.status === 'Active');
+    let results = [...rows];
+    const dbNames = results.map(r => (r.amenitiesName || '').toLowerCase());
+    let filtered = seedAmenities.filter(a => a.status === 'Active' && !dbNames.includes((a.amenitiesName || '').toLowerCase()));
     if (req.query.scope) {
       filtered = filtered.filter(a =>
         a.availabilityScope.toLowerCase() === 'all' ||
         a.availabilityScope.toLowerCase() === req.query.scope.toLowerCase()
       );
     }
-    return res.json(filtered);
+    return res.json([...results, ...filtered]);
   } catch (err) {
     let filtered = seedAmenities.filter(a => a.status === 'Active');
     if (req.query.scope) {

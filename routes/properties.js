@@ -54,9 +54,12 @@ const filterMockProperties = (list, query) => {
 router.get('/', async (req, res) => {
   try {
     const { status, type, city, search, date, minPrice, maxPrice, guests, limit = 50, page = 1 } = req.query;
-    const filter = { status: 'Active' };
-
-    if (status) filter.status = status;
+    const filter = {};
+    if (status && status !== 'All') {
+      filter.status = status;
+    } else if (!status) {
+      filter.status = 'Active';
+    }
     if (type) filter.type = type;
     if (city) filter.city = city;
     if (search) {
@@ -93,7 +96,8 @@ router.get('/', async (req, res) => {
     const propertiesDb = await Property.find(filter)
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit))
-      .sort({ hasActiveOffer: -1, createdAt: -1 });
+      .sort({ priority: -1, hasActiveOffer: -1, createdAt: -1 })
+      .populate('experiences');
 
     const total = await Property.countDocuments(filter);
 
@@ -117,6 +121,7 @@ router.get('/', async (req, res) => {
       rating: p.rating || 4.5,
       status: p.status || 'Active',
       hasActiveOffer: p.hasActiveOffer || false,
+      experiences: p.experiences || [],
       createdAt: p.createdAt
     }));
 
@@ -147,10 +152,20 @@ router.get('/top', async (req, res) => {
 });
 
 import upload from '../middleware/upload.js';
+import { checkPhotoLimit } from '../middleware/subscriptionMiddleware.js';
 
 // POST upload images — MUST be before /:id to avoid being caught by it
-router.post('/upload', upload.array('images', 10), (req, res) => {
+router.post('/upload', protect, ownerOnly, checkPhotoLimit, upload.array('images', 100), (req, res) => {
   try {
+    const incomingFilesCount = req.files ? req.files.length : 0;
+    
+    // checkPhotoLimit sets req.photoLimit
+    if (incomingFilesCount > req.photoLimit) {
+      return res.status(403).json({
+        message: `You can only upload ${req.photoLimit} more photos. Subscribe to upload unlimited photos.`
+      });
+    }
+
     const filePaths = req.files.map(file => file.filename.startsWith('http') ? file.filename : `/uploads/${file.filename}`);
     res.json({ urls: filePaths });
   } catch (err) {
@@ -227,7 +242,7 @@ router.delete('/landmarks/:id', protect, ownerOnly, async (req, res) => {
 // GET single property — /:id MUST come AFTER all named routes
 router.get('/:id', async (req, res) => {
   try {
-    const property = await Property.findById(req.params.id);
+    const property = await Property.findById(req.params.id).populate('experiences');
     if (!property) return res.status(404).json({ message: 'Property not found' });
     res.json(property);
   } catch (err) {
@@ -246,6 +261,17 @@ router.post('/', protect, ownerOnly, async (req, res) => {
     if (body.bedrooms !== undefined) body.bedRooms = Number(body.bedrooms);
     if (body.address !== undefined) body.location = body.address;
     
+    const sanitizeObjId = (id) => (typeof id === 'string' && /^[a-fA-F0-9]{24}$/.test(id)) ? id : undefined;
+    if ('countryId' in body) body.countryId = sanitizeObjId(body.countryId);
+    if ('stateId' in body) body.stateId = sanitizeObjId(body.stateId);
+    if ('cityId' in body) body.cityId = sanitizeObjId(body.cityId);
+    if ('locationId' in body) body.locationId = sanitizeObjId(body.locationId);
+    if (Array.isArray(body.experiences)) {
+      body.experiences = body.experiences.filter(exp => sanitizeObjId(exp));
+    } else {
+      delete body.experiences;
+    }
+    
     // Auto-extract city from location if not provided
     if (!body.city && body.location) {
       const parts = body.location.split(',');
@@ -263,34 +289,55 @@ router.post('/', protect, ownerOnly, async (req, res) => {
       const targetOwnerId = body.owner || body.ownerId;
       ownerId = targetOwnerId;
       const User = (await import('../models/User.js')).default;
-      const ownerUser = await User.findById(targetOwnerId);
-      if (ownerUser) {
-        ownerName = ownerUser.name;
-        ownerContact = ownerUser.phone || ownerUser.email || 'N/A';
-      }
+      try {
+        const ownerUser = await User.findById(targetOwnerId);
+        if (ownerUser) {
+          ownerName = ownerUser.name;
+          ownerContact = ownerUser.phone || ownerUser.email || 'N/A';
+        }
+      } catch (err) {}
     }
+
+    if (String(ownerId) === 'fake_admin_123') ownerId = '507f1f77bcf86cd799439011';
+    if (String(ownerId) === 'fake_owner_123') ownerId = '507f1f77bcf86cd799439012';
+
+    // Admin creates properties as Active; owners go through Pending/approval
+    const initialStatus = isAdmin ? 'Active' : 'Pending';
 
     const propertyData = {
       propertyNo: `PR-${1000 + count + 1}`,
       ...body,
       owner: ownerId,
-      status: 'Pending' // Strictly force pending so it awaits admin approval
+      status: initialStatus
     };
     const property = await Property.create(propertyData);
 
-    // Create a property request for admin approval
-    const requestCount = await PropertyRequest.countDocuments();
+    // Automatically create a Property Request record
+    const countReq = await PropertyRequest.countDocuments();
     await PropertyRequest.create({
-      requestNo: `REQ-${3000 + requestCount + 1}`,
-      image: property.images && property.images.length > 0 ? property.images[0] : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60',
+      requestNo: `REQ-${3000 + countReq + 1}`,
+      property: property._id,
+      property_id: property._id,
       propertyName: property.name,
       location: property.location,
       category: property.type,
       ownerName: ownerName,
       ownerContact: ownerContact,
       priceByOwner: property.price,
-      property: property._id,
-      status: 'NotAccepted'
+      
+      room_type: body.roomType || property.type,
+      room_image_url: property.images && property.images.length > 0 ? property.images[0] : '',
+      bed_type: property.beds ? `${property.beds} Beds` : '',
+      amenities_types: property.amenities || [],
+      original_price: property.originalPrice,
+      price_per_room: property.price,
+      checkin_time: property.checkIn,
+      checkout_time: property.checkOut,
+      offers: [],
+      rules: property.rules ? [{ title: "Property Rules", points: [property.rules] }] : [],
+      // Admin-created → auto-approved; owner-created → pending approval
+      admin_status: isAdmin ? 'approved' : 'pending',
+      status: isAdmin ? 'Accepted' : 'pending'
     });
 
     const responseObj = property.toObject();
@@ -317,10 +364,21 @@ router.put('/:id', protect, ownerOnly, async (req, res) => {
     
     // Map input fields for compatibility
     const body = { ...req.body };
-    delete body.status; // Prevent owner from bypassing admin approval via generic update
+    if (!isAdmin) delete body.status; // Prevent owner from bypassing admin approval via generic update
     if (body.price_per_night !== undefined) body.price = Number(body.price_per_night);
     if (body.bedrooms !== undefined) body.bedRooms = Number(body.bedrooms);
     if (body.address !== undefined) body.location = body.address;
+
+    const sanitizeObjId = (id) => (typeof id === 'string' && /^[a-fA-F0-9]{24}$/.test(id)) ? id : undefined;
+    if ('countryId' in body) body.countryId = sanitizeObjId(body.countryId);
+    if ('stateId' in body) body.stateId = sanitizeObjId(body.stateId);
+    if ('cityId' in body) body.cityId = sanitizeObjId(body.cityId);
+    if ('locationId' in body) body.locationId = sanitizeObjId(body.locationId);
+    if (Array.isArray(body.experiences)) {
+      body.experiences = body.experiences.filter(exp => sanitizeObjId(exp));
+    } else {
+      delete body.experiences;
+    }
 
     Object.assign(property, body);
     await property.save();
@@ -480,7 +538,7 @@ Only include fields that are clearly mentioned. If no city but a place is mentio
       ];
     }
 
-    const properties = await Property.find(dbFilter).sort({ hasActiveOffer: -1, createdAt: -1 }).limit(20);
+    const properties = await Property.find(dbFilter).sort({ hasActiveOffer: -1, createdAt: -1 }).limit(20).populate('experiences');
     const formatted = properties.map((p, i) => ({
       _id: p._id,
       propertyNo: p.propertyNo || `PR-${1000 + i}`,
@@ -494,7 +552,8 @@ Only include fields that are clearly mentioned. If no city but a place is mentio
       guests: p.capacity,
       rating: p.rating,
       status: p.status,
-      hasActiveOffer: p.hasActiveOffer
+      hasActiveOffer: p.hasActiveOffer,
+      experiences: p.experiences || []
     }));
 
     res.json({

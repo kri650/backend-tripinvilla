@@ -33,9 +33,9 @@ router.get('/', async (req, res) => {
       createdAt: p.createdAt
     }));
 
-    if (results.length === 0) {
-      results = mockPropertyMasters;
-    }
+    const dbNames = results.map(r => (r.propertyName || '').toLowerCase());
+    const missingMocks = mockPropertyMasters.filter(m => !dbNames.includes((m.propertyName || '').toLowerCase()));
+    results = [...results, ...missingMocks];
 
     res.json(results);
   } catch (err) {
