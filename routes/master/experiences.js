@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import ExperienceMaster from '../../models/ExperienceMaster.js';
 import PropertyExperienceTag from '../../models/PropertyExperienceTag.js';
 import Property from '../../models/Property.js';
@@ -13,12 +14,15 @@ router.get('/active', async (req, res) => {
     let results = [];
 
     for (const exp of experiencesDb) {
-      const count = await Property.countDocuments({
+      const query = {
         $or: [
-          { experiences: exp._id },
-          { experiences: exp.experienceName }
+          { experiences: exp._id }
         ]
-      });
+      };
+      if (mongoose.isValidObjectId(exp.experienceName)) {
+        query.$or.push({ experiences: exp.experienceName });
+      }
+      const count = await Property.countDocuments(query);
       results.push({
         _id: exp._id,
         experienceName: exp.experienceName,
@@ -44,12 +48,15 @@ router.get('/', async (req, res) => {
     let results = [];
 
     for (const exp of experiencesDb) {
-      const count = await Property.countDocuments({
+      const query = {
         $or: [
-          { experiences: exp._id },
-          { experiences: exp.experienceName }
+          { experiences: exp._id }
         ]
-      });
+      };
+      if (mongoose.isValidObjectId(exp.experienceName)) {
+        query.$or.push({ experiences: exp.experienceName });
+      }
+      const count = await Property.countDocuments(query);
       results.push({
         _id: exp._id,
         experienceName: exp.experienceName,

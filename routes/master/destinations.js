@@ -9,7 +9,11 @@ const router = express.Router();
 // GET /api/masters/destinations
 router.get('/', async (req, res) => {
   try {
-    const destinationsDb = await DestinationMaster.find().populate('stateId').populate('countryId').sort({ destinationName: 1 });
+    const filter = {};
+    if (req.query.status) {
+      filter.status = req.query.status;
+    }
+    const destinationsDb = await DestinationMaster.find(filter).populate('stateId').populate('countryId').sort({ destinationName: 1 });
     let results = [];
 
     for (const dest of destinationsDb) {

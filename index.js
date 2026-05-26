@@ -124,6 +124,7 @@ app.use('/api/masters/states', stateMasterRoutes);
 app.use('/api/masters/cities', cityMasterRoutes);
 app.use('/api/masters/locations', locationMasterRoutes);
 app.use('/api/masters/destinations', destinationMasterRoutes);
+app.use('/api/masters/experiences', experienceMasterRoutes);
 app.use('/api/admin/experiences', experienceMasterRoutes);
 app.use('/api/pricing-rules', pricingRuleRoutes);
 

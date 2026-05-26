@@ -3,9 +3,163 @@ import Property from '../models/Property.js';
 import Enquiry from '../models/Enquiry.js';
 import Offer from '../models/Offer.js';
 import Booking from '../models/Booking.js';
+import CountryMaster from '../models/CountryMaster.js';
+import StateMaster from '../models/StateMaster.js';
+import DestinationMaster from '../models/DestinationMaster.js';
+import ExperienceMaster from '../models/ExperienceMaster.js';
 
 export const seedDatabase = async () => {
   try {
+    // Seed India country if not exists
+    let india = await CountryMaster.findOne({ countryName: { $regex: /^india$/i } });
+    if (!india) {
+      india = await CountryMaster.create({
+        countryName: 'India',
+        dialCode: '91',
+        currencyCode: 'INR',
+        currencySymbol: '₹',
+        flagImageUrl: 'https://www.bbassets.com/media/uploads/p/l/40268816_2-indian-national-flag-khadi-material-durable.jpg',
+        status: 'Active'
+      });
+      console.log('✅ Country India seeded!');
+    }
+
+    // Seed States if not exist
+    const stateNames = ['Maharashtra', 'Goa', 'Delhi', 'Himachal Pradesh', 'Uttarakhand', 'Tamil Nadu', 'Karnataka', 'Rajasthan', 'Kerala'];
+    const statesMap = {};
+    for (const name of stateNames) {
+      let st = await StateMaster.findOne({ stateName: { $regex: new RegExp(`^${name}$`, 'i') } });
+      if (!st) {
+        st = await StateMaster.create({
+          stateName: name,
+          countryId: india._id,
+          status: 'Active'
+        });
+        console.log(`✅ State ${name} seeded!`);
+      }
+      statesMap[name] = st._id;
+    }
+
+    // Seed DestinationMaster
+    const mockDests = [
+      {
+        destinationName: 'Mumbai',
+        stateId: statesMap['Maharashtra'],
+        countryId: india._id,
+        coverImageUrl: 'https://images.unsplash.com/photo-1570168007204-dfb528c6958f?auto=format&fit=crop&w=400&q=80',
+        description: 'Experience the vibrant city of Mumbai, with its rich heritage, seaside views, and bustling street markets.',
+        propertyTypesOffered: ['Villa', 'Homestay', 'Apartment'],
+        status: 'Active'
+      },
+      {
+        destinationName: 'Goa',
+        stateId: statesMap['Goa'],
+        countryId: india._id,
+        coverImageUrl: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=400&q=80',
+        description: 'Sunny beaches, historic churches, and delicious seafood. Perfect seaside getaway.',
+        propertyTypesOffered: ['Villa', 'Homestay', 'Resort'],
+        status: 'Active'
+      },
+      {
+        destinationName: 'Delhi',
+        stateId: statesMap['Delhi'],
+        countryId: india._id,
+        coverImageUrl: 'https://images.unsplash.com/photo-1587474260584-136574528ed5?auto=format&fit=crop&w=400&q=80',
+        description: "Explore India's capital city, famous for heritage monuments like the Red Fort and delicious street food.",
+        propertyTypesOffered: ['Homestay', 'Apartment', 'Hotel'],
+        status: 'Active'
+      },
+      {
+        destinationName: 'Manali',
+        stateId: statesMap['Himachal Pradesh'],
+        countryId: india._id,
+        coverImageUrl: 'https://images.unsplash.com/photo-1499793983690-e29da59ef1c2?auto=format&fit=crop&w=400&q=80',
+        description: 'A high-altitude Himalayan resort town, popular for backpacking, skiing, and trekking.',
+        propertyTypesOffered: ['Cottage', 'Homestay', 'Resort'],
+        status: 'Active'
+      },
+      {
+        destinationName: 'Kasol',
+        stateId: statesMap['Himachal Pradesh'],
+        countryId: india._id,
+        coverImageUrl: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=400&q=80',
+        description: 'A hamlet in the Parvati Valley, known for scenic beauty, treks, and hippie culture.',
+        propertyTypesOffered: ['Cottage', 'Homestay'],
+        status: 'Active'
+      },
+      {
+        destinationName: 'Mukteswar',
+        stateId: statesMap['Uttarakhand'],
+        countryId: india._id,
+        coverImageUrl: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=80',
+        description: 'Scenic views of the Himalayas, apple orchards, and a peaceful mountain escape.',
+        propertyTypesOffered: ['Cottage', 'Villa'],
+        status: 'Active'
+      }
+    ];
+
+    for (const dest of mockDests) {
+      const existingDest = await DestinationMaster.findOne({ destinationName: { $regex: new RegExp(`^${dest.destinationName}$`, 'i') } });
+      if (!existingDest) {
+        await DestinationMaster.create(dest);
+        console.log(`✅ Destination ${dest.destinationName} seeded!`);
+      }
+    }
+
+    // Seed ExperienceMaster
+    const mockExps = [
+      {
+        experienceName: 'Beachside Bliss',
+        representingIcon: 'Anchor',
+        themeCoverImageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=400&q=80',
+        description: 'Stunning coastal views, white sands, private beach access, and refreshing sea breeze.',
+        status: 'Active'
+      },
+      {
+        experienceName: 'Mountain Retreats',
+        representingIcon: 'Mountain',
+        themeCoverImageUrl: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=400&q=80',
+        description: 'Crisp mountain air, scenic valleys, snow-capped peaks, and cozy fireside stays.',
+        status: 'Active'
+      },
+      {
+        experienceName: 'Forest Stays',
+        representingIcon: 'TreePine',
+        themeCoverImageUrl: 'https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=400&q=80',
+        description: 'Lush green treehouse stays, nature trails, birds chirping, and complete tranquil forest escapes.',
+        status: 'Active'
+      },
+      {
+        experienceName: 'Heritage Haveli',
+        representingIcon: 'Castle',
+        themeCoverImageUrl: 'https://images.unsplash.com/photo-1590050752117-238cb0fb12b1?auto=format&fit=crop&w=400&q=80',
+        description: 'Royal architecture, traditional courtyards, historical stories, and majestic vintage hospitality.',
+        status: 'Active'
+      },
+      {
+        experienceName: 'Pet Friendly Getaways',
+        representingIcon: 'Dog',
+        themeCoverImageUrl: 'https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?auto=format&fit=crop&w=400&q=80',
+        description: 'Spacious lawns, pet-loving hosts, open fields, and warm memories with your furry companions.',
+        status: 'Active'
+      },
+      {
+        experienceName: 'Private Pool Villas',
+        representingIcon: 'Palmtree',
+        themeCoverImageUrl: 'https://images.unsplash.com/photo-1576013551627-0cc20b96c2a7?auto=format&fit=crop&w=400&q=80',
+        description: 'Luxurious infinity pools, complete privacy, poolside lounge dinners, and pristine style.',
+        status: 'Active'
+      }
+    ];
+
+    for (const exp of mockExps) {
+      const existingExp = await ExperienceMaster.findOne({ experienceName: { $regex: new RegExp(`^${exp.experienceName}$`, 'i') } });
+      if (!existingExp) {
+        await ExperienceMaster.create(exp);
+        console.log(`✅ Experience theme ${exp.experienceName} seeded!`);
+      }
+    }
+
     // 0. Super Admin
     let superAdmin = await User.findOne({ email: 'admin@tripinvilla.com' });
     if (!superAdmin) {
