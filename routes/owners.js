@@ -20,12 +20,43 @@ const makeOwnerNo = (userId) => {
 // GET /api/owners
 router.get('/', async (req, res) => {
   try {
-    const ownersDb = await User.find({ role: 'owner' })
-      .select('-password')
-      .sort({ createdAt: -1 });
+    const { search, type, date } = req.query;
+
+    let ownersQuery = { role: 'owner' };
+    
+    // search filter on owners
+    if (search) {
+      ownersQuery.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const ownersDb = await User.find(ownersQuery).select('-password').sort({ createdAt: -1 });
 
     const ownerIds = ownersDb.map(o => o._id);
-    const props = await Property.find({ owner: { $in: ownerIds } }).select('name owner');
+    const props = await Property.find({ owner: { $in: ownerIds } }).select('name owner type createdAt');
+    
+    // If type or date is provided, filter the valid owners based on their properties
+    let validOwnerIds = new Set(ownerIds.map(id => id.toString()));
+
+    if (type || date) {
+      let filteredProps = props;
+      if (type) {
+        filteredProps = filteredProps.filter(p => p.type === type);
+      }
+      if (date) {
+        const startDate = new Date(date);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = new Date(date);
+        endDate.setHours(23, 59, 59, 999);
+        filteredProps = filteredProps.filter(p => p.createdAt >= startDate && p.createdAt <= endDate);
+      }
+      const ownersWithMatchingProps = filteredProps.map(p => p.owner.toString());
+      validOwnerIds = new Set(ownersWithMatchingProps);
+    }
+
     const propMap = new Map();
     for (const p of props) {
       const key = String(p.owner);
@@ -33,21 +64,23 @@ router.get('/', async (req, res) => {
       propMap.get(key).push(p.name);
     }
 
-    const formattedOwners = ownersDb.map(o => {
-      const propertyNames = propMap.get(String(o._id)) || [];
-      return {
-        _id: o._id,
-        ownerNo: makeOwnerNo(o._id),
-        image: o.avatar || defaultOwnerAvatar,
-        ownerName: o.name,
-        email: o.email,
-        contactNo: o.phone || '',
-        properties: propertyNames,
-        numberOfProperties: propertyNames.length,
-        status: o.status || 'Active',
-        createdAt: o.createdAt
-      };
-    });
+    const formattedOwners = ownersDb
+      .filter(o => validOwnerIds.has(o._id.toString()))
+      .map(o => {
+        const propertyNames = propMap.get(String(o._id)) || [];
+        return {
+          _id: o._id,
+          ownerNo: makeOwnerNo(o._id),
+          image: o.avatar || defaultOwnerAvatar,
+          ownerName: o.name,
+          email: o.email,
+          contactNo: o.phone || '',
+          properties: propertyNames,
+          numberOfProperties: propertyNames.length,
+          status: o.status || 'Active',
+          createdAt: o.createdAt
+        };
+      });
 
     const [totalOwners, activeOwners, inactiveOwners] = await Promise.all([
       User.countDocuments({ role: 'owner' }),
