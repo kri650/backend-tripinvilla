@@ -24,7 +24,7 @@ const mapLoc = (l) => ({
 router.get('/', async (req, res) => {
   try {
     const filter = {};
-    if (req.query.city_id) filter.cityId = req.query.city_id;
+    if (req.query.city_id) filter.parentLocation = req.query.city_id;
     const locationsDb = await LocationMaster.find(filter).sort({ createdAt: -1 });
     res.json(locationsDb.map(mapLoc));
   } catch (err) {
@@ -37,7 +37,7 @@ router.get('/', async (req, res) => {
 router.get('/active', async (req, res) => {
   try {
     const filter = { status: 'Active' };
-    if (req.query.city_id) filter.cityId = req.query.city_id;
+    if (req.query.city_id) filter.parentLocation = req.query.city_id;
     const locationsDb = await LocationMaster.find(filter).sort({ locationName: 1 });
     res.json(locationsDb.map(mapLoc));
   } catch (err) {
