@@ -145,10 +145,84 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
   }
 });
 
+// POST /api/property-requests/admin-direct -> Admin creates an auto-approved room
+router.post('/admin-direct', protect, adminOnly, async (req, res) => {
+  try {
+    const { property_id, room_type, room_image_url, room_images, bed_type, amenities_types, original_price, price_per_room, checkin_time, checkout_time, offers } = req.body;
+
+    const property = await Property.findById(property_id);
+    if (!property) return res.status(404).json({ message: 'Property not found' });
+
+    const count = await PropertyRequest.countDocuments();
+    const requestNo = `REQ-${3000 + count + 1}`;
+
+    const imgs = Array.isArray(room_images) && room_images.length > 0 ? room_images : (room_image_url ? [room_image_url] : []);
+
+    const newRoom = await PropertyRequest.create({
+      requestNo,
+      property: property_id,
+      property_id,
+      propertyName: property.name,
+      location: property.location,
+      category: property.type,
+      ownerName: property.ownerName || 'Admin',
+      ownerContact: 'admin',
+      priceByOwner: Number(price_per_room),
+      room_type,
+      room_image_url: imgs[0] || '',
+      room_images: imgs,
+      bed_type,
+      amenities_types: Array.isArray(amenities_types) ? amenities_types : [],
+      original_price: original_price ? Number(original_price) : undefined,
+      price_per_room: Number(price_per_room),
+      checkin_time,
+      checkout_time,
+      offers: Array.isArray(offers) ? offers : [],
+      admin_status: 'approved',
+      status: 'Accepted'
+    });
+
+    res.status(201).json(newRoom);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+// PUT /api/property-requests/admin-direct/:id -> Admin updates a room
+router.put('/admin-direct/:id', protect, adminOnly, async (req, res) => {
+  try {
+    const { room_type, room_image_url, room_images, bed_type, amenities_types, original_price, price_per_room, checkin_time, checkout_time, offers } = req.body;
+
+    const imgs = Array.isArray(room_images) && room_images.length > 0 ? room_images : (room_image_url ? [room_image_url] : []);
+
+    const updated = await PropertyRequest.findByIdAndUpdate(
+      req.params.id,
+      {
+        room_type,
+        room_image_url: imgs[0] || '',
+        room_images: imgs,
+        bed_type,
+        amenities_types: Array.isArray(amenities_types) ? amenities_types : [],
+        original_price: original_price ? Number(original_price) : undefined,
+        price_per_room: Number(price_per_room),
+        priceByOwner: Number(price_per_room),
+        checkin_time,
+        checkout_time,
+        offers: Array.isArray(offers) ? offers : [],
+      },
+      { new: true }
+    );
+
+    if (!updated) return res.status(404).json({ message: 'Room not found' });
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
 // GET /api/property-requests/property/:propertyId -> Public approved rooms for a property
 router.get('/property/:propertyId', async (req, res) => {
   try {
-    // Query both property and property_id fields for compatibility
     const requests = await PropertyRequest.find({
       $or: [
         { property: req.params.propertyId },
@@ -159,10 +233,9 @@ router.get('/property/:propertyId', async (req, res) => {
     const formatted = requests.map(r => ({
       _id: r._id,
       title: r.room_type || 'Deluxe Room',
-      img: r.room_image_url || r.image || (r.property?.images && r.property.images.length > 0 ? r.property.images[0] : 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=600&q=80'),
-      features: [
-        ...(r.amenities_types || [])
-      ],
+      img: r.room_image_url || (r.property?.images && r.property.images.length > 0 ? r.property.images[0] : 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=600&q=80'),
+      images: r.room_images && r.room_images.length > 0 ? r.room_images : (r.room_image_url ? [r.room_image_url] : []),
+      features: [...(r.amenities_types || [])],
       offers: r.offers || [],
       beds: r.bed_type || '2 Beds',
       rooms: '1 Room',
@@ -178,6 +251,7 @@ router.get('/property/:propertyId', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
 
 // POST /api/property-requests -> Submit request
 router.post('/', protect, ownerOnly, async (req, res) => {

@@ -16,6 +16,7 @@ const propertyRequestSchema = new mongoose.Schema({
   category: { type: String },
   room_type: { type: String },
   room_image_url: { type: String },
+  room_images: [{ type: String }],
   bed_type: { type: String },
   amenities_types: [{ type: String }],
   price_per_room: { type: Number },
