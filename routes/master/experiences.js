@@ -6,12 +6,6 @@ import { upload } from '../../middleware/upload.js';
 
 const router = express.Router();
 
-const mockExperiences = [
-  { _id: "6a0e00000000000000000001", experienceName: "Jungle Stay", representingIcon: "TreePine", themeCoverImageUrl: "https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=500&auto=format&fit=crop&q=60", description: "Immersive nature retreats surrounded by lush wild forest canopy.", propertiesCount: 24, status: "Active" },
-  { _id: "6a0e00000000000000000002", experienceName: "Beachfront", representingIcon: "Umbrella", themeCoverImageUrl: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500&auto=format&fit=crop&q=60", description: "Wake up to soothing ocean waves and walk right onto golden sands.", propertiesCount: 42, status: "Active" },
-  { _id: "6a0e00000000000000000003", experienceName: "Mountain View", representingIcon: "Mountain", themeCoverImageUrl: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=500&auto=format&fit=crop&q=60", description: "High altitude panoramic stays amidst snowy peaks and crisp mountain air.", propertiesCount: 35, status: "Active" }
-];
-
 // GET active experiences for frontend tab
 router.get('/active', async (req, res) => {
   try {
@@ -36,17 +30,10 @@ router.get('/active', async (req, res) => {
       });
     }
 
-    const dbIds = results.map(r => r._id.toString());
-    const mergedResults = [...results];
-    for (const mock of mockExperiences) {
-      if (!dbIds.includes(mock._id.toString()) && mock.status === 'Active') {
-        mergedResults.push(mock);
-      }
-    }
-
-    res.json(mergedResults);
+    res.json(results);
   } catch (err) {
-    res.json(mockExperiences.filter(e => e.status === 'Active'));
+    console.error('Error fetching active experiences:', err);
+    res.status(500).json({ message: 'Error fetching experiences' });
   }
 });
 
@@ -74,17 +61,10 @@ router.get('/', async (req, res) => {
       });
     }
 
-    const dbIds = results.map(r => r._id.toString());
-    const mergedResults = [...results];
-    for (const mock of mockExperiences) {
-      if (!dbIds.includes(mock._id.toString())) {
-        mergedResults.push(mock);
-      }
-    }
-
-    res.json(mergedResults);
+    res.json(results);
   } catch (err) {
-    res.json(mockExperiences);
+    console.error('Error fetching experiences:', err);
+    res.status(500).json({ message: 'Error fetching experiences' });
   }
 });
 
@@ -94,13 +74,12 @@ router.post('/', upload.single('themeCoverImage'), async (req, res) => {
     const data = { ...req.body };
     if (req.file) {
       data.themeCoverImageUrl = req.file.filename.startsWith('http') ? req.file.filename : `/uploads/${req.file.filename}`;
-    } else if (data.themeCoverImageUrl) {
-      // Allow passing URL directly
     }
     const newExp = await ExperienceMaster.create(data);
     res.status(201).json(newExp);
   } catch (err) {
-    res.status(201).json({ _id: Date.now(), ...req.body });
+    console.error('Error creating experience:', err);
+    res.status(400).json({ message: err.message });
   }
 });
 
@@ -112,22 +91,23 @@ router.put('/:id', upload.single('themeCoverImage'), async (req, res) => {
       data.themeCoverImageUrl = req.file.filename.startsWith('http') ? req.file.filename : `/uploads/${req.file.filename}`;
     }
     const exp = await ExperienceMaster.findByIdAndUpdate(req.params.id, data, { new: true });
-    if (!exp) return res.json({ _id: req.params.id, ...data, message: 'Mock experience updated' });
+    if (!exp) return res.status(404).json({ message: 'Experience not found' });
     res.json(exp);
   } catch (err) {
-    res.json({ _id: req.params.id, ...req.body, message: 'Mock experience updated' });
+    console.error('Error updating experience:', err);
+    res.status(400).json({ message: err.message });
   }
 });
 
 // DELETE experience
 router.delete('/:id', async (req, res) => {
   try {
-    // Delete tags as well
     await PropertyExperienceTag.deleteMany({ experienceId: req.params.id });
     await ExperienceMaster.findByIdAndDelete(req.params.id);
     res.json({ message: 'Experience master deleted successfully' });
   } catch (err) {
-    res.json({ message: 'Experience master deleted successfully' });
+    console.error('Error deleting experience:', err);
+    res.status(500).json({ message: err.message });
   }
 });
 

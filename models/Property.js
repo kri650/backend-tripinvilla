@@ -12,6 +12,7 @@ const propertySchema = new mongoose.Schema({
   state: { type: String },
   country: { type: String, default: 'India' },
   price: { type: Number, required: true },
+  price_per_night: { type: Number },
   bedRooms: { type: Number, default: 1 },
   roomType: { type: String, default: '1 Room' },
   ownerContact: { type: String },
@@ -62,6 +63,16 @@ const propertySchema = new mongoose.Schema({
   totalRooms: { type: String },
   totalFloors: { type: String },
   activities: [{ type: String }],
+  // Rooms (for Hotel/Resort)
+  rooms: [{
+    roomType: { type: String },
+    roomName: { type: String },
+    pricePerNight: { type: Number },
+    maxGuests: { type: Number },
+    bedType: { type: String },
+    count: { type: Number, default: 1 },
+    amenities: [{ type: String }]
+  }],
   
   // Apartment specific
   floorNumber: { type: String },

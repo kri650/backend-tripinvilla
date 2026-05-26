@@ -5,13 +5,6 @@ import User from '../../models/User.js';
 
 const router = express.Router();
 
-const mockStates = [
-  { _id: "st1", stateName: "Maharashtra", countryName: "India", status: "Active", citiesCount: 45, ownersCount: 120 },
-  { _id: "st2", stateName: "Himachal Pradesh", countryName: "India", status: "Active", citiesCount: 12, ownersCount: 34 },
-  { _id: "st3", stateName: "Goa", countryName: "India", status: "Active", citiesCount: 2, ownersCount: 85 },
-  { _id: "st4", stateName: "Karnataka", countryName: "India", status: "Active", citiesCount: 30, ownersCount: 95 }
-];
-
 // GET all states with virtual counts
 router.get('/', async (req, res) => {
   try {
@@ -39,15 +32,10 @@ router.get('/', async (req, res) => {
       });
     }
 
-    if (!req.query.country_id) {
-      const dbNames = results.map(r => (r.stateName || '').toLowerCase());
-      const missingMocks = mockStates.filter(m => !dbNames.includes((m.stateName || '').toLowerCase()));
-      results = [...results, ...missingMocks];
-    }
-
     res.json(results);
   } catch (err) {
-    res.json(mockStates);
+    console.error('Error fetching states:', err);
+    res.status(500).json({ message: 'Error fetching states' });
   }
 });
 
@@ -67,14 +55,10 @@ router.get('/active', async (req, res) => {
       status: st.status
     }));
 
-    if (!req.query.country_id) {
-      const dbNames = results.map(r => (r.stateName || '').toLowerCase());
-      const missingMocks = mockStates.filter(m => m.status === 'Active' && !dbNames.includes((m.stateName || '').toLowerCase()));
-      results = [...results, ...missingMocks];
-    }
     res.json(results);
   } catch (err) {
-    res.json(mockStates.filter(s => s.status === 'Active'));
+    console.error('Error fetching active states:', err);
+    res.status(500).json({ message: 'Error fetching active states' });
   }
 });
 
@@ -84,7 +68,8 @@ router.post('/', async (req, res) => {
     const newState = await StateMaster.create(req.body);
     res.status(201).json(newState);
   } catch (err) {
-    res.status(201).json({ _id: Date.now(), ...req.body });
+    console.error('Error creating state:', err);
+    res.status(400).json({ message: err.message });
   }
 });
 
@@ -92,10 +77,11 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const state = await StateMaster.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!state) return res.json({ _id: req.params.id, ...req.body, message: 'Mock state master updated' });
+    if (!state) return res.status(404).json({ message: 'State not found' });
     res.json(state);
   } catch (err) {
-    res.json({ _id: req.params.id, ...req.body, message: 'Mock state master updated' });
+    console.error('Error updating state:', err);
+    res.status(400).json({ message: err.message });
   }
 });
 
@@ -110,7 +96,8 @@ router.delete('/:id', async (req, res) => {
     await StateMaster.findByIdAndDelete(req.params.id);
     res.json({ message: 'State master deleted successfully' });
   } catch (err) {
-    res.status(500).json({ message: 'Error deleting state master' });
+    console.error('Error deleting state:', err);
+    res.status(500).json({ message: err.message });
   }
 });
 

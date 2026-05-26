@@ -5,15 +5,6 @@ import { upload } from '../../middleware/upload.js';
 
 const router = express.Router();
 
-const mockDestinations = [
-  { _id: "dm1", destinationName: "Mumbai", stateName: "Maharashtra", countryName: "India", coverImageUrl: "https://images.unsplash.com/photo-1570168007204-dfb528c6958f?auto=format&fit=crop&w=400&q=80", propertyTypesOffered: ["Villa", "Apartment"], description: "The city of dreams.", propertiesCount: 45, status: "Active" },
-  { _id: "dm2", destinationName: "Goa", stateName: "Goa", countryName: "India", coverImageUrl: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=400&q=80", propertyTypesOffered: ["Villa", "Hotel", "Resort"], description: "Sun, sand and heritage Portuguese villas.", propertiesCount: 64, status: "Active" },
-  { _id: "dm3", destinationName: "Delhi", stateName: "Delhi", countryName: "India", coverImageUrl: "https://images.unsplash.com/photo-1587474260584-136574528ed5?auto=format&fit=crop&w=400&q=80", propertyTypesOffered: ["Hotel", "Homestay"], description: "Historical monuments and vibrant markets.", propertiesCount: 89, status: "Active" },
-  { _id: "dm4", destinationName: "Manali", stateName: "Himachal Pradesh", countryName: "India", coverImageUrl: "https://images.unsplash.com/photo-1499793983690-e29da59ef1c2?auto=format&fit=crop&w=400&q=80", propertyTypesOffered: ["Cottage", "Homestay", "Resort"], description: "Snow-capped mountains and adventure sports.", propertiesCount: 52, status: "Active" },
-  { _id: "dm5", destinationName: "Kasol", stateName: "Himachal Pradesh", countryName: "India", coverImageUrl: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=400&q=80", propertyTypesOffered: ["Homestay", "Cottage"], description: "Peaceful valleys and riverside woodhouses.", propertiesCount: 28, status: "Active" },
-  { _id: "dm6", destinationName: "Mukteswar", stateName: "Uttarakhand", countryName: "India", coverImageUrl: "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=80", propertyTypesOffered: ["Resort", "Homestay"], description: "Breathtaking Himalayan views and fruit orchards.", propertiesCount: 15, status: "Active" }
-];
-
 // GET all destinations with auto-calculated property counts
 // GET /api/masters/destinations
 router.get('/', async (req, res) => {
@@ -38,13 +29,10 @@ router.get('/', async (req, res) => {
       });
     }
 
-    const dbNames = results.map(r => (r.destinationName || '').toLowerCase());
-    const missingMocks = mockDestinations.filter(m => !dbNames.includes((m.destinationName || '').toLowerCase()));
-    results = [...results, ...missingMocks];
-
     res.json(results);
   } catch (err) {
-    res.json(mockDestinations);
+    console.error('Error fetching destinations:', err);
+    res.status(500).json({ message: 'Error fetching destinations' });
   }
 });
 
@@ -62,7 +50,8 @@ router.post('/', upload.single('coverImage'), async (req, res) => {
     const newDest = await DestinationMaster.create(data);
     res.status(201).json(newDest);
   } catch (err) {
-    res.status(201).json({ _id: Date.now(), ...req.body });
+    console.error('Error creating destination:', err);
+    res.status(400).json({ message: err.message });
   }
 });
 
@@ -78,10 +67,11 @@ router.put('/:id', upload.single('coverImage'), async (req, res) => {
       try { data.propertyTypesOffered = JSON.parse(data.propertyTypesOffered); } catch(e) { data.propertyTypesOffered = [data.propertyTypesOffered]; }
     }
     const dest = await DestinationMaster.findByIdAndUpdate(req.params.id, data, { new: true });
-    if (!dest) return res.json({ _id: req.params.id, ...data, message: 'Mock destination updated' });
+    if (!dest) return res.status(404).json({ message: 'Destination not found' });
     res.json(dest);
   } catch (err) {
-    res.json({ _id: req.params.id, ...req.body, message: 'Mock destination updated' });
+    console.error('Error updating destination:', err);
+    res.status(400).json({ message: err.message });
   }
 });
 
@@ -92,7 +82,8 @@ router.delete('/:id', async (req, res) => {
     await DestinationMaster.findByIdAndDelete(req.params.id);
     res.json({ message: 'Destination master deleted successfully' });
   } catch (err) {
-    res.json({ message: 'Destination master deleted successfully' });
+    console.error('Error deleting destination:', err);
+    res.status(500).json({ message: err.message });
   }
 });
 
