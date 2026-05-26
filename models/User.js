@@ -22,6 +22,7 @@ const userSchema = new mongoose.Schema({
   emergencyName: { type: String },
   emergencyPhone: { type: String },
   emergencyEmail: { type: String },
+  permissions: { type: [String], default: [] },
   isBlacklisted: { type: Boolean, default: false },
   isPremium: { type: Boolean, default: false },
   subscription: {

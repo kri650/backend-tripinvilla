@@ -104,6 +104,30 @@ router.get('/admins', async (req, res) => {
   }
 });
 
+// POST create admin
+router.post('/admins', async (req, res) => {
+  try {
+    const { name, email, phone, password, role, permissions } = req.body;
+    const exists = await User.findOne({ email });
+    if (exists) return res.status(400).json({ message: 'Email already exists' });
+    
+    // Only allow admin roles
+    const adminRole = ['admin', 'super_admin', 'moderator'].includes(role) ? role : 'admin';
+    const user = await User.create({
+      name,
+      email,
+      phone,
+      password,
+      role: adminRole,
+      permissions: permissions || [],
+      status: 'Active'
+    });
+    res.status(201).json({ message: 'Admin created successfully', user });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // DELETE admin
 router.delete('/admins/:id', async (req, res) => {
   try {
