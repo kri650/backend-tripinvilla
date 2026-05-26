@@ -96,6 +96,13 @@ router.get('/', async (req, res) => {
 // POST add city
 router.post('/', async (req, res) => {
   try {
+    if (req.body.stateId) {
+      const StateMaster = (await import('../../models/StateMaster.js')).default;
+      const stateObj = await StateMaster.findById(req.body.stateId);
+      if (stateObj && stateObj.countryId) {
+        req.body.countryId = stateObj.countryId;
+      }
+    }
     const newCity = await CityMaster.create(req.body);
     res.status(201).json(newCity);
   } catch (err) {
@@ -106,6 +113,13 @@ router.post('/', async (req, res) => {
 // PUT edit city
 router.put('/:id', async (req, res) => {
   try {
+    if (req.body.stateId) {
+      const StateMaster = (await import('../../models/StateMaster.js')).default;
+      const stateObj = await StateMaster.findById(req.body.stateId);
+      if (stateObj && stateObj.countryId) {
+        req.body.countryId = stateObj.countryId;
+      }
+    }
     const city = await CityMaster.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!city) return res.json({ _id: req.params.id, ...req.body, message: 'Mock city master updated' });
     res.json(city);

@@ -8,7 +8,7 @@ const landmarkSchema = new mongoose.Schema({
 
 const locationMasterSchema = new mongoose.Schema({
   locationName: { type: String, required: true, trim: true },
-  locationType: { type: String, enum: ['Country', 'State', 'City', 'Area'], required: true },
+  locationType: { type: String, enum: ['Country', 'State', 'City', 'Area', 'Sub-Location'], required: true },
   parentLocation: { type: String },
   landmarks: [landmarkSchema],
   status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
