@@ -169,11 +169,19 @@ router.post('/', async (req, res) => {
     const uName = user_name || name || 'Guest';
     const qText = query || message || 'No message provided';
 
-    const pDoc = await Property.findById(propId);
-    if (!pDoc) return res.status(404).json({ message: 'Property not found' });
+    let pDoc;
+    try {
+      if (mongoose.Types.ObjectId.isValid(propId)) {
+        pDoc = await Property.findById(propId);
+      }
+    } catch(e) {}
+    
+    // For mock properties that don't exist in DB
+    const finalPropId = pDoc ? pDoc._id : new mongoose.Types.ObjectId();
+    const finalPropName = pDoc ? pDoc.name : (propertyName || name || 'Mock Property');
 
     const newEnquiry = await Enquiry.create({
-      property_id: propId,
+      property_id: finalPropId,
       user_id: user_id || null,
       user_name: uName,
       phone: phone || 'N/A',
@@ -181,10 +189,10 @@ router.post('/', async (req, res) => {
       query: qText,
       
       // Compatibility fields
-      property: propId,
+      property: finalPropId,
       name: uName,
       message: qText,
-      propertyName: pDoc.name,
+      propertyName: finalPropName,
       status: 'Open'
     });
 
