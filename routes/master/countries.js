@@ -5,23 +5,14 @@ import { upload } from '../../middleware/upload.js';
 
 const router = express.Router();
 
-const mockCountries = [
-  { _id: "c1", countryName: "India", dialCode: "+91", currencyCode: "INR", currencySymbol: "₹", flagImageUrl: "https://flagcdn.com/w80/in.png", status: "Active" },
-  { _id: "c2", countryName: "United States", dialCode: "+1", currencyCode: "USD", currencySymbol: "$", flagImageUrl: "https://flagcdn.com/w80/us.png", status: "Active" },
-  { _id: "c3", countryName: "United Arab Emirates", dialCode: "+971", currencyCode: "AED", currencySymbol: "د.إ", flagImageUrl: "https://flagcdn.com/w80/ae.png", status: "Active" }
-];
-
 // GET all countries
 router.get('/', async (req, res) => {
   try {
     const countriesDb = await CountryMaster.find().sort({ countryName: 1 });
-    let results = countriesDb;
-    const dbNames = results.map(r => (r.countryName || '').toLowerCase());
-    const missingMocks = mockCountries.filter(m => !dbNames.includes((m.countryName || '').toLowerCase()));
-    results = [...results, ...missingMocks];
-    res.json(results);
+    res.json(countriesDb);
   } catch (err) {
-    res.json(mockCountries);
+    console.error('Error fetching countries:', err);
+    res.status(500).json({ message: 'Error fetching countries' });
   }
 });
 
@@ -29,13 +20,10 @@ router.get('/', async (req, res) => {
 router.get('/active', async (req, res) => {
   try {
     const activeCountries = await CountryMaster.find({ status: 'Active' }).sort({ countryName: 1 });
-    let results = activeCountries;
-    const dbNames = results.map(r => (r.countryName || '').toLowerCase());
-    const missingMocks = mockCountries.filter(m => m.status === 'Active' && !dbNames.includes((m.countryName || '').toLowerCase()));
-    results = [...results, ...missingMocks];
-    res.json(results);
+    res.json(activeCountries);
   } catch (err) {
-    res.json(mockCountries.filter(c => c.status === 'Active'));
+    console.error('Error fetching active countries:', err);
+    res.status(500).json({ message: 'Error fetching active countries' });
   }
 });
 
@@ -49,7 +37,8 @@ router.post('/', upload.single('flagImage'), async (req, res) => {
     const newCountry = await CountryMaster.create(data);
     res.status(201).json(newCountry);
   } catch (err) {
-    res.status(201).json({ _id: Date.now(), ...req.body });
+    console.error('Error creating country:', err);
+    res.status(400).json({ message: err.message });
   }
 });
 
@@ -61,10 +50,11 @@ router.put('/:id', upload.single('flagImage'), async (req, res) => {
       data.flagImageUrl = req.file.filename.startsWith('http') ? req.file.filename : `/uploads/${req.file.filename}`;
     }
     const country = await CountryMaster.findByIdAndUpdate(req.params.id, data, { new: true });
-    if (!country) return res.json({ _id: req.params.id, ...data, message: 'Mock country master updated' });
+    if (!country) return res.status(404).json({ message: 'Country not found' });
     res.json(country);
   } catch (err) {
-    res.json({ _id: req.params.id, ...req.body, message: 'Mock country master updated' });
+    console.error('Error updating country:', err);
+    res.status(400).json({ message: err.message });
   }
 });
 
@@ -80,6 +70,7 @@ router.delete('/:id', async (req, res) => {
     await CountryMaster.findByIdAndDelete(req.params.id);
     res.json({ message: 'Country master deleted successfully' });
   } catch (err) {
+    console.error('Error deleting country:', err);
     res.status(500).json({ message: 'Error deleting country master' });
   }
 });
