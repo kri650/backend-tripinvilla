@@ -18,6 +18,7 @@ const allowedOrigins = [
   'http://13.127.196.228:5174',
   'http://13.127.196.228:5173',
   'http://13.127.196.228:8000',
+  'http://13.127.196.228',
 ];
 app.use(cors({
   origin: (origin, callback) => {
