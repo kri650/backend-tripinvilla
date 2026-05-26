@@ -69,24 +69,47 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video
       ...data
     });
     
-    // Also create the actual Property for relationships
+    // Also create the actual Property for guest website visibility
     try {
-      await Property.create({
-        ...data,
-        _id: newPropertyMaster._id, // Keep IDs synced
+      const propData = {
         propertyNo: `PM-${100 + count + 1}`,
         name: data.propertyName || 'Unnamed Property',
-        type: data.propertyType || 'Homestay',
+        type: ['Villa', 'Resort', 'Homestay', 'Cottage', 'Hotel', 'Apartment', 'Motel', 'Bungalow', 'Farmhouse', 'Others'].includes(data.propertyType)
+          ? data.propertyType : 'Homestay',
         location: data.location || 'Unknown',
-        city: data.cityName || data.city || 'Unknown',
-        price: data.price_per_night || data.propertyPrice || 0,
+        city: data.cityName || data.city || data.location || 'Unknown',
+        state: data.stateName || data.state,
+        country: data.countryName || data.country || 'India',
+        price: Number(data.propertyPrice) || Number(data.price) || 0,
+        price_per_night: Number(data.propertyPrice) || Number(data.price_per_night) || 0,
         ownerContact: data.ownerContact,
-        amenities: data.amenities || data.amenityTypes || [],
-        description: data.aboutProperty,
-        status: 'Active'
-      });
+        amenities: Array.isArray(data.amenities) ? data.amenities : (Array.isArray(data.amenityTypes) ? data.amenityTypes : []),
+        description: data.aboutProperty || data.description,
+        images: Array.isArray(data.images) ? data.images.filter(u => u && !u.startsWith('blob:')) : [],
+        rooms: Array.isArray(data.rooms) ? data.rooms : [],
+        checkIn: data.checkIn || '3:00 PM',
+        checkOut: data.checkOut || '12:00 PM',
+        rules: data.rules,
+        bedRooms: Number(data.bedRooms) || 1,
+        bathRooms: Number(data.bathRooms) || 1,
+        capacity: Number(data.capacity) || 2,
+        beds: Number(data.beds) || 1,
+        area: data.area,
+        status: 'Active',
+        full_address: data.full_address || data.location,
+        highlights: data.highlights,
+        countryId: data.countryId || undefined,
+        stateId: data.stateId || undefined,
+        cityId: data.cityId || undefined,
+        locationId: data.locationId || undefined,
+      };
+      // Only set owner if it's a valid non-empty string
+      if (data.owner && data.owner.toString().length === 24) {
+        propData.owner = data.owner;
+      }
+      await Property.create({ _id: newPropertyMaster._id, ...propData });
     } catch(err) {
-      console.error("Error syncing Property:", err);
+      console.error("Error syncing Property:", err.message);
     }
 
     res.status(201).json(newPropertyMaster);
@@ -118,18 +141,22 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'vid
     
     // Also update the actual Property
     try {
-      await Property.findByIdAndUpdate(req.params.id, {
-        ...data,
+      const updateData = {
         name: data.propertyName,
-        type: data.propertyType,
+        type: ['Villa', 'Resort', 'Homestay', 'Cottage', 'Hotel', 'Apartment', 'Motel', 'Bungalow', 'Farmhouse', 'Others'].includes(data.propertyType)
+          ? data.propertyType : undefined,
         location: data.location,
         city: data.cityName || data.city,
-        price: data.price_per_night || data.propertyPrice,
+        state: data.stateName || data.state,
+        price: Number(data.propertyPrice) || Number(data.price) || undefined,
+        price_per_night: Number(data.propertyPrice) || undefined,
         ownerContact: data.ownerContact,
-        amenities: data.amenities || data.amenityTypes,
-        description: data.aboutProperty,
-      });
-    } catch(err) {}
+        amenities: Array.isArray(data.amenities) ? data.amenities : (Array.isArray(data.amenityTypes) ? data.amenityTypes : undefined),
+        description: data.aboutProperty || data.description,
+        rooms: Array.isArray(data.rooms) ? data.rooms : undefined,
+      };
+      await Property.findByIdAndUpdate(req.params.id, updateData);
+    } catch(err) { console.error('Property sync update error:', err.message); }
 
     if (!property) return res.status(404).json({ message: 'Property not found' });
     res.json(property);
