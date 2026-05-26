@@ -24,7 +24,23 @@ const mapLoc = (l) => ({
 router.get('/', async (req, res) => {
   try {
     const filter = {};
-    if (req.query.city_id) filter.parentLocation = req.query.city_id;
+    if (req.query.city_name) {
+      // Filter by city name — parentLocation stores name strings like "Sirmaur" or "Sirmaur → HP → India"
+      filter.parentLocation = { $regex: req.query.city_name, $options: 'i' };
+    } else if (req.query.city_id) {
+      // Fallback: look up city name by ID, then search by name
+      try {
+        const City = (await import('../../models/City.js')).default;
+        const city = await City.findById(req.query.city_id).lean();
+        if (city && city.cityName) {
+          filter.parentLocation = { $regex: city.cityName, $options: 'i' };
+        } else {
+          filter.parentLocation = req.query.city_id;
+        }
+      } catch(e) {
+        filter.parentLocation = req.query.city_id;
+      }
+    }
     const locationsDb = await LocationMaster.find(filter).sort({ createdAt: -1 });
     res.json(locationsDb.map(mapLoc));
   } catch (err) {
@@ -37,7 +53,23 @@ router.get('/', async (req, res) => {
 router.get('/active', async (req, res) => {
   try {
     const filter = { status: 'Active' };
-    if (req.query.city_id) filter.parentLocation = req.query.city_id;
+    if (req.query.city_name) {
+      // Filter by city name — parentLocation stores name strings like "Sirmaur" or hierarchy
+      filter.parentLocation = { $regex: req.query.city_name, $options: 'i' };
+    } else if (req.query.city_id) {
+      // Fallback: look up city name by ID, then search by name
+      try {
+        const City = (await import('../../models/City.js')).default;
+        const city = await City.findById(req.query.city_id).lean();
+        if (city && city.cityName) {
+          filter.parentLocation = { $regex: city.cityName, $options: 'i' };
+        } else {
+          filter.parentLocation = req.query.city_id;
+        }
+      } catch(e) {
+        filter.parentLocation = req.query.city_id;
+      }
+    }
     const locationsDb = await LocationMaster.find(filter).sort({ locationName: 1 });
     res.json(locationsDb.map(mapLoc));
   } catch (err) {
