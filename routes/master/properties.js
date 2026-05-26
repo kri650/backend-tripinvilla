@@ -51,18 +51,34 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video
     const count = await PropertyMaster.countDocuments();
     const data = { ...req.body };
 
+    // Parse stringified fields from FormData
+    const parseIfString = (field) => {
+      if (typeof data[field] === 'string') {
+        try { data[field] = JSON.parse(data[field]); } catch(e) {}
+      }
+    };
+    ['amenityTypes', 'amenities', 'experiences', 'rooms', 'landmarks', 'highlights', 'images', 'videos'].forEach(parseIfString);
+
     if (req.files) {
       if (req.files['images']) {
-        data.images = req.files['images'].map(file => file.filename.startsWith('http') ? file.filename : `/uploads/${file.filename}`);
+        const newImages = req.files['images'].map(file => file.filename.startsWith('http') ? file.filename : `/uploads/${file.filename}`);
+        data.images = Array.isArray(data.images) ? [...data.images, ...newImages] : newImages;
       }
       if (req.files['videos']) {
-        data.videos = req.files['videos'].map(file => file.filename.startsWith('http') ? file.filename : `/uploads/${file.filename}`);
+        const newVideos = req.files['videos'].map(file => file.filename.startsWith('http') ? file.filename : `/uploads/${file.filename}`);
+        data.videos = Array.isArray(data.videos) ? [...data.videos, ...newVideos] : newVideos;
       }
     }
 
-    if (typeof data.amenityTypes === 'string') {
-      try { data.amenityTypes = JSON.parse(data.amenityTypes); } catch(e) { data.amenityTypes = [data.amenityTypes]; }
     }
+
+    // Parse stringified fields from FormData
+    const parseIfString = (field) => {
+      if (typeof data[field] === 'string') {
+        try { data[field] = JSON.parse(data[field]); } catch(e) {}
+      }
+    };
+    ['amenityTypes', 'amenities', 'experiences', 'rooms', 'landmarks', 'highlights'].forEach(parseIfString);
 
     const newPropertyMaster = await PropertyMaster.create({
       propertyNo: `PM-${100 + count + 1}`,
@@ -102,7 +118,13 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video
         stateId: data.stateId || undefined,
         cityId: data.cityId || undefined,
         locationId: data.locationId || undefined,
+        landmarks: Array.isArray(data.landmarks) ? data.landmarks : [],
+        experiences: Array.isArray(data.experiences) ? data.experiences : [],
+        taxAmount: data.taxAmount ? Number(data.taxAmount) : undefined,
+        latitude: data.latitude ? Number(data.latitude) : undefined,
+        longitude: data.longitude ? Number(data.longitude) : undefined,
       };
+      
       // Only set owner if it's a valid non-empty string
       if (data.owner && data.owner.toString().length === 24) {
         propData.owner = data.owner;
@@ -124,17 +146,23 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video
 router.put('/:id', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'videos', maxCount: 5 }]), async (req, res) => {
   try {
     const data = { ...req.body };
+    // Parse stringified fields from FormData
+    const parseIfString = (field) => {
+      if (typeof data[field] === 'string') {
+        try { data[field] = JSON.parse(data[field]); } catch(e) {}
+      }
+    };
+    ['amenityTypes', 'amenities', 'experiences', 'rooms', 'landmarks', 'highlights', 'images', 'videos'].forEach(parseIfString);
+
     if (req.files) {
       if (req.files['images']) {
-        data.images = req.files['images'].map(file => file.filename.startsWith('http') ? file.filename : `/uploads/${file.filename}`);
+        const newImages = req.files['images'].map(file => file.filename.startsWith('http') ? file.filename : `/uploads/${file.filename}`);
+        data.images = Array.isArray(data.images) ? [...data.images, ...newImages] : newImages;
       }
       if (req.files['videos']) {
-        data.videos = req.files['videos'].map(file => file.filename.startsWith('http') ? file.filename : `/uploads/${file.filename}`);
+        const newVideos = req.files['videos'].map(file => file.filename.startsWith('http') ? file.filename : `/uploads/${file.filename}`);
+        data.videos = Array.isArray(data.videos) ? [...data.videos, ...newVideos] : newVideos;
       }
-    }
-
-    if (typeof data.amenityTypes === 'string') {
-      try { data.amenityTypes = JSON.parse(data.amenityTypes); } catch(e) { data.amenityTypes = [data.amenityTypes]; }
     }
 
     const property = await PropertyMaster.findByIdAndUpdate(req.params.id, data, { new: true });
@@ -146,15 +174,42 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'vid
         type: ['Villa', 'Resort', 'Homestay', 'Cottage', 'Hotel', 'Apartment', 'Motel', 'Bungalow', 'Farmhouse', 'Others'].includes(data.propertyType)
           ? data.propertyType : undefined,
         location: data.location,
-        city: data.cityName || data.city,
+        city: data.cityName || data.city || data.location,
         state: data.stateName || data.state,
+        country: data.countryName || data.country,
         price: Number(data.propertyPrice) || Number(data.price) || undefined,
         price_per_night: Number(data.propertyPrice) || undefined,
         ownerContact: data.ownerContact,
         amenities: Array.isArray(data.amenities) ? data.amenities : (Array.isArray(data.amenityTypes) ? data.amenityTypes : undefined),
         description: data.aboutProperty || data.description,
+        images: Array.isArray(data.images) ? data.images.filter(u => u && !u.startsWith('blob:')) : undefined,
         rooms: Array.isArray(data.rooms) ? data.rooms : undefined,
+        checkIn: data.checkIn,
+        checkOut: data.checkOut,
+        rules: data.rules,
+        bedRooms: Number(data.bedRooms) || undefined,
+        bathRooms: Number(data.bathRooms) || undefined,
+        capacity: Number(data.capacity) || undefined,
+        beds: Number(data.beds) || undefined,
+        area: data.area,
+        full_address: data.full_address || data.location,
+        countryId: data.countryId || undefined,
+        stateId: data.stateId || undefined,
+        cityId: data.cityId || undefined,
+        locationId: data.locationId || undefined,
+        landmarks: Array.isArray(data.landmarks) ? data.landmarks : undefined,
+        experiences: Array.isArray(data.experiences) ? data.experiences : undefined,
+        taxAmount: data.taxAmount ? Number(data.taxAmount) : undefined,
+        latitude: data.latitude ? Number(data.latitude) : undefined,
+        longitude: data.longitude ? Number(data.longitude) : undefined,
       };
+
+      if (data.highlights && typeof data.highlights === 'object') {
+        updateData.highlights = data.highlights;
+      }
+
+      // Remove undefined fields
+      Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
       await Property.findByIdAndUpdate(req.params.id, updateData);
     } catch(err) { console.error('Property sync update error:', err.message); }
 
