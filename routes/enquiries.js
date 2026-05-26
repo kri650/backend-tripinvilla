@@ -163,7 +163,7 @@ router.get('/', protect, async (req, res) => {
 // CREATE direct enquiry (Public - no auth)
 router.post('/', async (req, res) => {
   try {
-    const { property_id, propertyId, user_id, user_name, phone, email, query, message, name, property } = req.body;
+    const { property_id, propertyId, user_id, user_name, phone, email, query, message, name, property, propertyName } = req.body;
     
     const propId = property_id || propertyId || property;
     const uName = user_name || name || 'Guest';
