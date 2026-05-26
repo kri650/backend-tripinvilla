@@ -1,6 +1,7 @@
 import express from 'express';
 import PropertyMaster from '../../models/PropertyMaster.js';
 import PropertyExperienceTag from '../../models/PropertyExperienceTag.js';
+import Property from '../../models/Property.js';
 import { upload } from '../../middleware/upload.js';
 
 const router = express.Router();
@@ -63,13 +64,35 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video
       try { data.amenityTypes = JSON.parse(data.amenityTypes); } catch(e) { data.amenityTypes = [data.amenityTypes]; }
     }
 
-    const newProperty = await PropertyMaster.create({
+    const newPropertyMaster = await PropertyMaster.create({
       propertyNo: `PM-${100 + count + 1}`,
       ...data
     });
-    res.status(201).json(newProperty);
+    
+    // Also create the actual Property for relationships
+    try {
+      await Property.create({
+        ...data,
+        _id: newPropertyMaster._id, // Keep IDs synced
+        propertyNo: `PM-${100 + count + 1}`,
+        name: data.propertyName || 'Unnamed Property',
+        type: data.propertyType || 'Homestay',
+        location: data.location || 'Unknown',
+        city: data.cityName || data.city || 'Unknown',
+        price: data.price_per_night || data.propertyPrice || 0,
+        ownerContact: data.ownerContact,
+        amenities: data.amenities || data.amenityTypes || [],
+        description: data.aboutProperty,
+        status: 'Active'
+      });
+    } catch(err) {
+      console.error("Error syncing Property:", err);
+    }
+
+    res.status(201).json(newPropertyMaster);
   } catch (err) {
-    res.status(201).json({ _id: Date.now(), propertyNo: `PM-${100 + Math.floor(Math.random()*100)}`, ...req.body });
+    console.error("Error creating PropertyMaster:", err);
+    res.status(400).json({ message: "Failed to create property master" });
   }
 });
 
@@ -92,10 +115,27 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'vid
     }
 
     const property = await PropertyMaster.findByIdAndUpdate(req.params.id, data, { new: true });
-    if (!property) return res.json({ _id: req.params.id, ...data, message: 'Mock property master updated' });
+    
+    // Also update the actual Property
+    try {
+      await Property.findByIdAndUpdate(req.params.id, {
+        ...data,
+        name: data.propertyName,
+        type: data.propertyType,
+        location: data.location,
+        city: data.cityName || data.city,
+        price: data.price_per_night || data.propertyPrice,
+        ownerContact: data.ownerContact,
+        amenities: data.amenities || data.amenityTypes,
+        description: data.aboutProperty,
+      });
+    } catch(err) {}
+
+    if (!property) return res.status(404).json({ message: 'Property not found' });
     res.json(property);
   } catch (err) {
-    res.json({ _id: req.params.id, ...req.body, message: 'Mock property master updated' });
+    console.error("Error updating PropertyMaster:", err);
+    res.status(400).json({ message: "Failed to update property" });
   }
 });
 
