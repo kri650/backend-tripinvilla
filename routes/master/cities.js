@@ -106,7 +106,8 @@ router.post('/', async (req, res) => {
     const newCity = await CityMaster.create(req.body);
     res.status(201).json(newCity);
   } catch (err) {
-    res.status(201).json({ _id: Date.now(), ...req.body });
+    console.error('Error creating city:', err);
+    res.status(400).json({ message: err.message });
   }
 });
 
@@ -121,10 +122,11 @@ router.put('/:id', async (req, res) => {
       }
     }
     const city = await CityMaster.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!city) return res.json({ _id: req.params.id, ...req.body, message: 'Mock city master updated' });
+    if (!city) return res.status(404).json({ message: 'City not found' });
     res.json(city);
   } catch (err) {
-    res.json({ _id: req.params.id, ...req.body, message: 'Mock city master updated' });
+    console.error('Error updating city:', err);
+    res.status(400).json({ message: err.message });
   }
 });
 
