@@ -64,16 +64,47 @@ function buildFilter(params) {
   // Availability
   Object.assign(filter, buildAvailabilityFilter(checkIn, checkOut));
 
-  // Keyword regex search (partial matches / typo tolerance)
+  // Keyword regex search (partial matches / multi-word tolerance)
   if (keyword && keyword.trim()) {
     const kw = keyword.trim();
-    filter.$or = [
-      { name: new RegExp(kw, "i") },
-      { city: new RegExp(kw, "i") },
-      { state: new RegExp(kw, "i") },
-      { location: new RegExp(kw, "i") },
-      { description: new RegExp(kw, "i") }
-    ];
+    const terms = kw.split(/\s+/).filter(t => t.length > 1);
+    
+    if (terms.length > 0) {
+      filter.$and = filter.$and || [];
+      terms.forEach(term => {
+        // Skip common stop words that might overly restrict results
+        if (['in', 'at', 'on', 'the', 'for', 'a', 'an', 'and'].includes(term.toLowerCase())) return;
+        
+        filter.$and.push({
+          $or: [
+            { name: new RegExp(term, "i") },
+            { city: new RegExp(term, "i") },
+            { state: new RegExp(term, "i") },
+            { location: new RegExp(term, "i") },
+            { type: new RegExp(term, "i") },
+            { category: new RegExp(term, "i") },
+            { description: new RegExp(term, "i") }
+          ]
+        });
+      });
+      // If all words were stop words, fallback to full string match
+      if (filter.$and.length === 0) {
+        delete filter.$and;
+        filter.$or = [
+          { name: new RegExp(kw, "i") },
+          { city: new RegExp(kw, "i") },
+          { location: new RegExp(kw, "i") }
+        ];
+      }
+    } else {
+      filter.$or = [
+        { name: new RegExp(kw, "i") },
+        { city: new RegExp(kw, "i") },
+        { state: new RegExp(kw, "i") },
+        { location: new RegExp(kw, "i") },
+        { description: new RegExp(kw, "i") }
+      ];
+    }
   }
 
   return filter;

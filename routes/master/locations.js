@@ -88,11 +88,23 @@ router.post('/', upload.array('landmarkImages', 20), async (req, res) => {
     if (data.landmarks) {
       const landmarkArray = typeof data.landmarks === 'string' ? JSON.parse(data.landmarks) : data.landmarks;
       const files = req.files || [];
-      parsedLandmarks = landmarkArray.map((l, idx) => ({
-        name: l.landmarkName || l.name,
-        popularity: l.landmarkPopularity || l.popularity || 'Tourist Popular',
-        images: files[idx] ? [`/uploads/${files[idx].filename}`] : (l.landmarkImageUrl ? [l.landmarkImageUrl] : (l.images || []))
-      }));
+      const hasFileArr = typeof req.body.landmarkHasFile === 'string' ? JSON.parse(req.body.landmarkHasFile) : (req.body.landmarkHasFile || []);
+      
+      let fileIdx = 0;
+      parsedLandmarks = landmarkArray.map((l, idx) => {
+        const hasFile = hasFileArr[idx] === 'true' || hasFileArr[idx] === true;
+        let imageUrls = l.landmarkImageUrl ? [l.landmarkImageUrl] : (l.images || []);
+        if (hasFile && files[fileIdx]) {
+          const uploadedUrl = files[fileIdx].filename;
+          imageUrls = [uploadedUrl.startsWith('http') ? uploadedUrl : `/uploads/${uploadedUrl}`];
+          fileIdx++;
+        }
+        return {
+          name: l.landmarkName || l.name,
+          popularity: l.landmarkPopularity || l.popularity || 'Tourist Popular',
+          images: imageUrls
+        };
+      });
     }
     data.landmarks = parsedLandmarks;
 
@@ -113,12 +125,24 @@ router.put('/:id', upload.array('landmarkImages', 20), async (req, res) => {
     if (data.landmarks) {
       const landmarkArray = typeof data.landmarks === 'string' ? JSON.parse(data.landmarks) : data.landmarks;
       const files = req.files || [];
-      data.landmarks = landmarkArray.map((l, idx) => ({
-        _id: l._id,
-        name: l.landmarkName || l.name,
-        popularity: l.landmarkPopularity || l.popularity || 'Tourist Popular',
-        images: files[idx] ? [`/uploads/${files[idx].filename}`] : (l.landmarkImageUrl ? [l.landmarkImageUrl] : (l.images || []))
-      }));
+      const hasFileArr = typeof req.body.landmarkHasFile === 'string' ? JSON.parse(req.body.landmarkHasFile) : (req.body.landmarkHasFile || []);
+
+      let fileIdx = 0;
+      data.landmarks = landmarkArray.map((l, idx) => {
+        const hasFile = hasFileArr[idx] === 'true' || hasFileArr[idx] === true;
+        let imageUrls = l.landmarkImageUrl ? [l.landmarkImageUrl] : (l.images || []);
+        if (hasFile && files[fileIdx]) {
+          const uploadedUrl = files[fileIdx].filename;
+          imageUrls = [uploadedUrl.startsWith('http') ? uploadedUrl : `/uploads/${uploadedUrl}`];
+          fileIdx++;
+        }
+        return {
+          _id: l._id,
+          name: l.landmarkName || l.name,
+          popularity: l.landmarkPopularity || l.popularity || 'Tourist Popular',
+          images: imageUrls
+        };
+      });
     }
 
     const location = await LocationMaster.findByIdAndUpdate(req.params.id, data, { new: true });
@@ -147,7 +171,8 @@ router.post('/:id/landmarks', upload.single('landmarkImage'), async (req, res) =
     const loc = await LocationMaster.findById(req.params.id);
     if (!loc) return res.status(404).json({ message: 'Location not found' });
 
-    const imgUrl = req.file ? `/uploads/${req.file.filename}` : (req.body.landmarkImageUrl || '');
+    const uploadedUrl = req.file ? req.file.filename : '';
+    const imgUrl = uploadedUrl ? (uploadedUrl.startsWith('http') ? uploadedUrl : `/uploads/${uploadedUrl}`) : (req.body.landmarkImageUrl || '');
     const newLandmark = {
       name: req.body.landmarkName || req.body.name,
       popularity: req.body.landmarkPopularity || req.body.popularity || 'Tourist Popular',
