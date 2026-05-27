@@ -69,16 +69,7 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video
         data.videos = Array.isArray(data.videos) ? [...data.videos, ...newVideos] : newVideos;
       }
     }
-
     }
-
-    // Parse stringified fields from FormData
-    const parseIfString = (field) => {
-      if (typeof data[field] === 'string') {
-        try { data[field] = JSON.parse(data[field]); } catch(e) {}
-      }
-    };
-    ['amenityTypes', 'amenities', 'experiences', 'rooms', 'landmarks', 'highlights'].forEach(parseIfString);
 
     const newPropertyMaster = await PropertyMaster.create({
       propertyNo: `PM-${100 + count + 1}`,
