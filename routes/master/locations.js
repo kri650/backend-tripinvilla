@@ -37,7 +37,7 @@ router.get('/', async (req, res) => {
         } else {
           filter.parentLocation = req.query.city_id;
         }
-      } catch(e) {
+      } catch (e) {
         filter.parentLocation = req.query.city_id;
       }
     }
@@ -66,7 +66,7 @@ router.get('/active', async (req, res) => {
         } else {
           filter.parentLocation = req.query.city_id;
         }
-      } catch(e) {
+      } catch (e) {
         filter.parentLocation = req.query.city_id;
       }
     }
@@ -89,14 +89,13 @@ router.post('/', upload.array('landmarkImages', 20), async (req, res) => {
       const landmarkArray = typeof data.landmarks === 'string' ? JSON.parse(data.landmarks) : data.landmarks;
       const files = req.files || [];
       const hasFileArr = typeof req.body.landmarkHasFile === 'string' ? JSON.parse(req.body.landmarkHasFile) : (req.body.landmarkHasFile || []);
-      
+
       let fileIdx = 0;
       parsedLandmarks = landmarkArray.map((l, idx) => {
         const hasFile = hasFileArr[idx] === 'true' || hasFileArr[idx] === true;
         let imageUrls = l.landmarkImageUrl ? [l.landmarkImageUrl] : (l.images || []);
         if (hasFile && files[fileIdx]) {
-          const uploadedUrl = files[fileIdx].filename;
-          imageUrls = [uploadedUrl.startsWith('http') ? uploadedUrl : `/uploads/${uploadedUrl}`];
+          imageUrls = [`/uploads/${files[fileIdx].filename}`];
           fileIdx++;
         }
         return {
@@ -132,8 +131,7 @@ router.put('/:id', upload.array('landmarkImages', 20), async (req, res) => {
         const hasFile = hasFileArr[idx] === 'true' || hasFileArr[idx] === true;
         let imageUrls = l.landmarkImageUrl ? [l.landmarkImageUrl] : (l.images || []);
         if (hasFile && files[fileIdx]) {
-          const uploadedUrl = files[fileIdx].filename;
-          imageUrls = [uploadedUrl.startsWith('http') ? uploadedUrl : `/uploads/${uploadedUrl}`];
+          imageUrls = [`/uploads/${files[fileIdx].filename}`];
           fileIdx++;
         }
         return {
@@ -181,7 +179,7 @@ router.post('/:id/landmarks', upload.single('landmarkImage'), async (req, res) =
 
     loc.landmarks.push(newLandmark);
     await loc.save();
-    
+
     const added = loc.landmarks[loc.landmarks.length - 1];
     res.status(201).json({
       _id: added._id,

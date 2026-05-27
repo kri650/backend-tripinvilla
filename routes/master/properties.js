@@ -38,7 +38,7 @@ router.get('/', async (req, res) => {
 
 // POST create property master with multiple images/videos
 // POST /api/master/properties
-router.post('/', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'videos', maxCount: 5 }]), async (req, res) => {
+router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'videos', maxCount: 5 }]), async (req, res) => {
   try {
     const count = await PropertyMaster.countDocuments();
     const data = { ...req.body };
@@ -125,7 +125,7 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video
 
 // PUT update property master
 // PUT /api/master/properties/:id
-router.put('/:id', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'videos', maxCount: 5 }]), async (req, res) => {
+router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'videos', maxCount: 5 }]), async (req, res) => {
   try {
     const data = { ...req.body };
     // Parse stringified fields from FormData

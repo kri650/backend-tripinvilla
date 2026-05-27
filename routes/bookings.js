@@ -157,6 +157,10 @@ router.post('/verify-premium', protect, requireRazorpay, async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
+    // Update all properties owned by this user to have priority 1
+    const Property = (await import('../models/Property.js')).default;
+    await Property.updateMany({ owner: req.user.id }, { priority: 1 });
+
     res.json({ message: 'Premium membership activated successfully!', user });
   } catch (err) {
     res.status(500).json({ message: err.message });

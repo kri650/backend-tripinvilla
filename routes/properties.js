@@ -303,16 +303,24 @@ router.post('/', protect, ownerOnly, async (req, res) => {
     let ownerContact = req.user.phone || req.user.email || 'N/A';
 
     const isAdmin = ['admin', 'super_admin'].includes(req.user.role);
+    let isPremiumOwner = req.user.isPremium || false;
+
+    const User = (await import('../models/User.js')).default;
     if (isAdmin && (body.owner || body.ownerId)) {
       const targetOwnerId = body.owner || body.ownerId;
       ownerId = targetOwnerId;
-      const User = (await import('../models/User.js')).default;
       try {
         const ownerUser = await User.findById(targetOwnerId);
         if (ownerUser) {
           ownerName = ownerUser.name;
           ownerContact = ownerUser.phone || ownerUser.email || 'N/A';
+          isPremiumOwner = ownerUser.isPremium || false;
         }
+      } catch (err) {}
+    } else if (!isAdmin) {
+      try {
+        const currentUser = await User.findById(ownerId);
+        if (currentUser) isPremiumOwner = currentUser.isPremium || false;
       } catch (err) {}
     }
 
@@ -326,38 +334,12 @@ router.post('/', protect, ownerOnly, async (req, res) => {
       propertyNo: `PR-${1000 + count + 1}`,
       ...body,
       owner: ownerId,
-      status: initialStatus
+      status: initialStatus,
+      priority: isPremiumOwner || isAdmin ? 1 : 0
     };
     const property = await Property.create(propertyData);
 
-    // Automatically create a Property Request record
-    const countReq = await PropertyRequest.countDocuments();
-    await PropertyRequest.create({
-      requestNo: `REQ-${3000 + countReq + 1}`,
-      property: property._id,
-      property_id: property._id,
-      propertyName: property.name,
-      location: property.location,
-      category: property.type,
-      ownerName: ownerName,
-      ownerContact: ownerContact,
-      priceByOwner: property.price,
-      
-      room_type: body.roomType || property.type,
-      room_image_url: property.images && property.images.length > 0 ? property.images[0] : '',
-      bed_type: property.beds ? `${property.beds} Beds` : '',
-      amenities_types: property.amenities || [],
-      original_price: property.originalPrice,
-      price_per_room: property.price,
-      checkin_time: property.checkIn,
-      checkout_time: property.checkOut,
-      offers: [],
-      rules: property.rules ? [{ title: "Property Rules", points: [property.rules] }] : [],
-      // Admin-created → auto-approved; owner-created → pending approval
-      admin_status: isAdmin ? 'approved' : 'pending',
-      status: isAdmin ? 'Accepted' : 'pending'
-    });
-
+    // Removed automatic PropertyRequest creation. Owners will manually add rooms via PropertyRequests.
     const responseObj = property.toObject();
     res.status(201).json({
       ...responseObj,
