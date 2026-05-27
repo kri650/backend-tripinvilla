@@ -101,7 +101,7 @@ router.get('/', async (req, res) => {
 // POST /api/owners
 router.post('/', async (req, res) => {
   try {
-    const { ownerName, email, contactNo, status, image } = req.body;
+    const { ownerName, email, contactNo, status, image, password } = req.body;
     if (!ownerName || !email || !contactNo) {
       return res.status(400).json({ message: 'ownerName, email and contactNo are required' });
     }
@@ -112,7 +112,7 @@ router.post('/', async (req, res) => {
     // If user already exists, upgrade to owner
     let tempPassword = null;
     if (!user) {
-      tempPassword = crypto.randomBytes(6).toString('hex');
+      tempPassword = password || crypto.randomBytes(6).toString('hex');
       user = await User.create({
         name: ownerName,
         email: normalizedEmail,
