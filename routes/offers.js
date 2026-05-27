@@ -122,20 +122,18 @@ router.post('/', protect, ownerOnly, async (req, res) => {
   try {
     const { property_id, food_type, offer_date, offer_time, offer_percent, description } = req.body;
 
-    // VALIDATION: property_id must have admin_status = "approved" in property_requests table
+    const property = await Property.findById(property_id);
+    if (!property) return res.status(404).json({ message: 'Property not found' });
+
     const approvedRequest = await PropertyRequest.findOne({ 
       property: property_id, 
       admin_status: 'approved' 
     });
 
-    if (!approvedRequest) {
-      return res.status(400).json({ 
-        message: 'Validation failed: Property must have an approved property request (room-level config) before creating an offer.' 
-      });
-    }
-
-    const property = await Property.findById(property_id);
-    if (!property) return res.status(404).json({ message: 'Property not found' });
+    const roomTypeVal = approvedRequest?.room_type || (property.rooms && property.rooms[0]?.roomType) || 'Deluxe Room';
+    const amenitiesVal = approvedRequest?.amenities_types || property.amenities || [];
+    const priceVal = approvedRequest?.price_per_room || property.price || 0;
+    const requestIdVal = approvedRequest?._id || null;
 
     const count = await Offer.countDocuments();
     const offerId = `OFF-${7000 + count + 1}`;
@@ -148,12 +146,12 @@ router.post('/', protect, ownerOnly, async (req, res) => {
     const newOffer = await Offer.create({
       offerId,
       property_id,
-      request_id: approvedRequest._id,
+      request_id: requestIdVal,
       category: property.type,
-      room_type: approvedRequest.room_type,
+      room_type: roomTypeVal,
       food_type,
-      amenities: approvedRequest.amenities_types || [],
-      price: approvedRequest.price_per_room || property.price,
+      amenities: amenitiesVal,
+      price: priceVal,
       offer_date: offerDateObj,
       offer_time,
       offer_percent,
@@ -166,7 +164,7 @@ router.post('/', protect, ownerOnly, async (req, res) => {
       location: property.location,
       dateFrom: offerDateObj,
       dateTo: offerDateObj,
-      room: approvedRequest.room_type,
+      room: roomTypeVal,
       foods: food_type,
       offerPercent: parseFloat(offer_percent) || 0
     });

@@ -911,3 +911,7 @@ Node.js v20.20.0
 [32m[nodemon] starting `node index.js`[39m
 🚀 Server running on port 8000
 ✅ MongoDB connected
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node index.js`[39m
+🚀 Server running on port 8000
+✅ MongoDB connected
