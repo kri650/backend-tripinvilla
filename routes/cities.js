@@ -18,7 +18,9 @@ router.get('/analytics', async (req, res) => {
     const aggregations = await Property.aggregate([
       { 
         $group: { 
-          _id: { city: "$city", state: "$state" }, 
+          _id: { $toLower: "$city" },
+          originalCity: { $first: "$city" },
+          originalState: { $first: "$state" },
           total: { $sum: 1 },
           homestays: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Homestay"] }, { $eq: ["$category", "Homestay"] }] }, 1, 0] }},
           resorts: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Resort"] }, { $eq: ["$category", "Resort"] }] }, 1, 0] }},
@@ -31,9 +33,9 @@ router.get('/analytics', async (req, res) => {
     ]);
 
     const result = aggregations.map(agg => ({
-      _id: agg._id.city || "Unknown",
-      cityName: agg._id.city || "Unknown",
-      stateName: agg._id.state || "Unknown",
+      _id: agg.originalCity || "Unknown",
+      cityName: agg.originalCity || "Unknown",
+      stateName: agg.originalState || "Unknown",
       totalProperties: agg.total,
       homestays: agg.homestays,
       resorts: agg.resorts,
