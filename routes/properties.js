@@ -197,7 +197,13 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
 // GET /api/properties/:id/landmarks
 router.get('/:id/landmarks', async (req, res) => {
   try {
-    const landmarks = await PropertyLandmark.find({ property_id: req.params.id });
+    let landmarks = await PropertyLandmark.find({ property_id: req.params.id });
+    if (!landmarks || landmarks.length === 0) {
+      const property = await Property.findById(req.params.id);
+      if (property && Array.isArray(property.landmarks) && property.landmarks.length > 0) {
+        landmarks = property.landmarks;
+      }
+    }
     res.json(landmarks);
   } catch (err) {
     res.status(500).json({ message: err.message });

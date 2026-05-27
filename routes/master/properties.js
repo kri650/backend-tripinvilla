@@ -26,6 +26,7 @@ router.get('/', async (req, res) => {
       videos: p.videos || [],
       aboutProperty: p.aboutProperty,
       status: p.status,
+      landmarks: p.landmarks || [],
       createdAt: p.createdAt
     }));
 

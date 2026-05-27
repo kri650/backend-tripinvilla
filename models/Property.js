@@ -41,6 +41,11 @@ const propertySchema = new mongoose.Schema({
     parkingAvailable: { type: Boolean, default: false },
   },
   experiences: [{ type: mongoose.Schema.Types.ObjectId, ref: 'ExperienceMaster' }],
+  landmarks: [{
+    landmark_name: { type: String },
+    landmark_type: { type: String },
+    landmark_image_url: { type: String }
+  }],
   
   // --- Type-Specific Details ---
   // Villa specific

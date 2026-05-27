@@ -13,6 +13,11 @@ const propertyMasterSchema = new mongoose.Schema({
   videos: [{ type: String }],
   aboutProperty: { type: String },
   status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
+  landmarks: [{
+    landmark_name: { type: String },
+    landmark_type: { type: String },
+    landmark_image_url: { type: String }
+  }],
 }, { timestamps: true });
 
 export default mongoose.model('PropertyMaster', propertyMasterSchema);
