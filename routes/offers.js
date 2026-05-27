@@ -122,7 +122,22 @@ router.post('/', protect, ownerOnly, async (req, res) => {
   try {
     const { property_id, food_type, offer_date, offer_time, offer_percent, description } = req.body;
 
-    const property = await Property.findById(property_id);
+        let property = await Property.findById(property_id);
+    if (!property) {
+      const { default: PropertyMaster } = await import('../models/PropertyMaster.js');
+      const pm = await PropertyMaster.findById(property_id);
+      if (pm) {
+        property = {
+          _id: pm._id,
+          name: pm.propertyName,
+          location: pm.location,
+          type: pm.propertyType,
+          rooms: pm.rooms || [],
+          amenities: pm.amenityTypes || pm.amenities || [],
+          price: pm.propertyPrice || pm.price || 0
+        };
+      }
+    }
     if (!property) return res.status(404).json({ message: 'Property not found' });
 
     const approvedRequest = await PropertyRequest.findOne({ 
