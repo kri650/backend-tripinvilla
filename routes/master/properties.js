@@ -6,11 +6,6 @@ import { upload } from '../../middleware/upload.js';
 
 const router = express.Router();
 
-const mockPropertyMasters = [
-  { _id: "pm1", propertyNo: "PM-101", propertyType: "Villa", propertyName: "Sunset Paradise Villa", ownerName: "Ramesh Gupta", ownerContact: "+91 9822012345", amenityTypes: ["Barbeque", "Private Pool", "Lawn"], location: "Anjuna, Goa, India", propertyPrice: 12500, images: ["https://images.unsplash.com/photo-1580587722351-9d9b788c0784?w=500&auto=format&fit=crop&q=60"], videos: [], aboutProperty: "Luxury 4BHK Villa with private pool.", status: "Active" },
-  { _id: "pm2", propertyNo: "PM-102", propertyType: "Homestay", propertyName: "Himalayan Woodhouse", ownerName: "Anita Sharma", ownerContact: "+91 9418054321", amenityTypes: ["Fireplace", "WiFi", "Trekking Guide"], location: "Kasol, Himachal Pradesh, India", propertyPrice: 3500, images: ["https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60"], videos: [], aboutProperty: "Cozy woodhouse overlooking the Parvati valley.", status: "Active" }
-];
-
 // GET all property master entries
 // GET /api/master/properties
 router.get('/', async (req, res) => {
@@ -34,13 +29,9 @@ router.get('/', async (req, res) => {
       createdAt: p.createdAt
     }));
 
-    const dbNames = results.map(r => (r.propertyName || '').toLowerCase());
-    const missingMocks = mockPropertyMasters.filter(m => !dbNames.includes((m.propertyName || '').toLowerCase()));
-    results = [...results, ...missingMocks];
-
     res.json(results);
   } catch (err) {
-    res.json(mockPropertyMasters);
+    res.status(500).json({ message: 'Error fetching properties' });
   }
 });
 
@@ -54,7 +45,7 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video
     // Parse stringified fields from FormData
     const parseIfString = (field) => {
       if (typeof data[field] === 'string') {
-        try { data[field] = JSON.parse(data[field]); } catch(e) {}
+        try { data[field] = JSON.parse(data[field]); } catch (e) { }
       }
     };
     ['amenityTypes', 'amenities', 'experiences', 'rooms', 'landmarks', 'highlights', 'images', 'videos'].forEach(parseIfString);
@@ -69,13 +60,12 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video
         data.videos = Array.isArray(data.videos) ? [...data.videos, ...newVideos] : newVideos;
       }
     }
-    }
 
     const newPropertyMaster = await PropertyMaster.create({
       propertyNo: `PM-${100 + count + 1}`,
       ...data
     });
-    
+
     // Also create the actual Property for guest website visibility
     try {
       const propData = {
@@ -115,13 +105,13 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video
         latitude: data.latitude ? Number(data.latitude) : undefined,
         longitude: data.longitude ? Number(data.longitude) : undefined,
       };
-      
+
       // Only set owner if it's a valid non-empty string
       if (data.owner && data.owner.toString().length === 24) {
         propData.owner = data.owner;
       }
       await Property.create({ _id: newPropertyMaster._id, ...propData });
-    } catch(err) {
+    } catch (err) {
       console.error("Error syncing Property:", err.message);
     }
 
@@ -140,7 +130,7 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'vid
     // Parse stringified fields from FormData
     const parseIfString = (field) => {
       if (typeof data[field] === 'string') {
-        try { data[field] = JSON.parse(data[field]); } catch(e) {}
+        try { data[field] = JSON.parse(data[field]); } catch (e) { }
       }
     };
     ['amenityTypes', 'amenities', 'experiences', 'rooms', 'landmarks', 'highlights', 'images', 'videos'].forEach(parseIfString);
@@ -157,7 +147,7 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'vid
     }
 
     const property = await PropertyMaster.findByIdAndUpdate(req.params.id, data, { new: true });
-    
+
     // Also update the actual Property
     try {
       const updateData = {
@@ -202,7 +192,7 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 10 }, { name: 'vid
       // Remove undefined fields
       Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
       await Property.findByIdAndUpdate(req.params.id, updateData);
-    } catch(err) { console.error('Property sync update error:', err.message); }
+    } catch (err) { console.error('Property sync update error:', err.message); }
 
     if (!property) return res.status(404).json({ message: 'Property not found' });
     res.json(property);
@@ -231,22 +221,22 @@ router.post('/:id/experiences', async (req, res) => {
     if (!experienceId) {
       return res.status(400).json({ message: 'Experience ID is required' });
     }
-    
+
     // Check if tag already exists
     const existing = await PropertyExperienceTag.findOne({
       propertyId: req.params.id,
       experienceId: experienceId
     });
-    
+
     if (existing) {
       return res.status(200).json(existing);
     }
-    
+
     const newTag = await PropertyExperienceTag.create({
       propertyId: req.params.id,
       experienceId: experienceId
     });
-    
+
     res.status(201).json(newTag);
   } catch (err) {
     console.error('Error tagging property:', err);
