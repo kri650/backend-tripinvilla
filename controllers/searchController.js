@@ -64,9 +64,16 @@ function buildFilter(params) {
   // Availability
   Object.assign(filter, buildAvailabilityFilter(checkIn, checkOut));
 
-  // Keyword full-text search
+  // Keyword regex search (partial matches / typo tolerance)
   if (keyword && keyword.trim()) {
-    filter.$text = { $search: keyword.trim() };
+    const kw = keyword.trim();
+    filter.$or = [
+      { name: new RegExp(kw, "i") },
+      { city: new RegExp(kw, "i") },
+      { state: new RegExp(kw, "i") },
+      { location: new RegExp(kw, "i") },
+      { description: new RegExp(kw, "i") }
+    ];
   }
 
   return filter;
@@ -81,23 +88,16 @@ export const search = async (req, res) => {
     const { page = 1, limit = 12, sortBy = "priority" } = req.query;
     const filter = buildFilter(req.query);
 
-    // Sort options
     const sortMap = {
       priority: { priority: -1, createdAt: -1 },
       "price-asc": { price: 1, priority: -1 },
       "price-desc": { price: -1, priority: -1 },
       newest: { createdAt: -1 },
-      // If text search active, also score by relevance
-      ...(filter.$text ? { relevance: { score: { $meta: "textScore" }, priority: -1 } } : {}),
     };
 
     const sort = sortMap[sortBy] || sortMap.priority;
 
-    const projection = filter.$text
-      ? { score: { $meta: "textScore" } }
-      : {};
-
-    const propertiesDb = await Property.find(filter, projection)
+    const propertiesDb = await Property.find(filter)
       .sort(sort)
       .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit))
