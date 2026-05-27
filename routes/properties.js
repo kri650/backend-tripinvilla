@@ -53,7 +53,7 @@ const filterMockProperties = (list, query) => {
 // GET /api/properties
 router.get('/', async (req, res) => {
   try {
-    const { status, type, city, search, date, minPrice, maxPrice, guests, limit = 50, page = 1 } = req.query;
+    const { status, type, city, search, date, dateFrom, dateTo, minPrice, maxPrice, guests, limit = 50, page = 1 } = req.query;
     const filter = {};
     if (status && status !== 'All') {
       filter.status = status;
@@ -91,6 +91,18 @@ router.get('/', async (req, res) => {
       const endDate = new Date(date);
       endDate.setHours(23, 59, 59, 999);
       filter.createdAt = { $gte: startDate, $lte: endDate };
+    } else if (dateFrom || dateTo) {
+      filter.createdAt = {};
+      if (dateFrom) {
+        const startDate = new Date(dateFrom);
+        startDate.setHours(0, 0, 0, 0);
+        filter.createdAt.$gte = startDate;
+      }
+      if (dateTo) {
+        const endDate = new Date(dateTo);
+        endDate.setHours(23, 59, 59, 999);
+        filter.createdAt.$lte = endDate;
+      }
     }
 
     const propertiesDb = await Property.find(filter)
