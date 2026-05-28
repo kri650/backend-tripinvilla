@@ -10,26 +10,61 @@ const router = express.Router();
 // GET /api/master/properties
 router.get('/', async (req, res) => {
   try {
-    const propertiesDb = await PropertyMaster.find().sort({ createdAt: -1 });
+    const propertiesDb = await PropertyMaster.find().sort({ createdAt: -1 }).lean();
+    const propertyIds = propertiesDb.map(p => p._id);
+    const linkedProperties = await Property.find({ _id: { $in: propertyIds } }).lean();
+    
+    const linkedMap = linkedProperties.reduce((acc, p) => { 
+      acc[p._id.toString()] = p; 
+      return acc; 
+    }, {});
 
-    let results = propertiesDb.map(p => ({
-      _id: p._id,
-      propertyNo: p.propertyNo,
-      propertyType: p.propertyType,
-      propertyName: p.propertyName,
-      ownerName: p.ownerName,
-      ownerContact: p.ownerContact,
-      amenityTypes: p.amenityTypes || [],
-      location: p.location,
-      propertyPrice: p.propertyPrice,
-      images: p.images || [],
-      videos: p.videos || [],
-      aboutProperty: p.aboutProperty,
-      status: p.status,
-      landmarks: p.landmarks || [],
-      rooms: p.rooms || [],
-      createdAt: p.createdAt
-    }));
+    let results = propertiesDb.map(p => {
+      const linked = linkedMap[p._id.toString()] || {};
+      return {
+        _id: p._id,
+        propertyNo: p.propertyNo,
+        propertyType: p.propertyType,
+        propertyName: p.propertyName,
+        ownerName: p.ownerName,
+        ownerContact: p.ownerContact,
+        owner: linked.owner,
+        amenityTypes: p.amenityTypes || [],
+        amenities: linked.amenities || p.amenityTypes || [],
+        location: p.location,
+        full_address: linked.full_address || p.location,
+        latitude: linked.latitude,
+        longitude: linked.longitude,
+        propertyPrice: p.propertyPrice,
+        originalPrice: linked.originalPrice || linked.price_per_night,
+        taxAmount: linked.taxAmount,
+        images: p.images || [],
+        videos: p.videos || [],
+        aboutProperty: p.aboutProperty,
+        status: p.status,
+        checkIn: linked.checkIn || '3:00 PM',
+        checkOut: linked.checkOut || '12:00 PM',
+        area: linked.area || '31 sq. ft.',
+        bedRooms: linked.bedRooms || 1,
+        beds: linked.beds || 2,
+        capacity: linked.capacity || 3,
+        bathRooms: linked.bathRooms || 1,
+        rules: linked.rules,
+        otherDetails: linked.otherDetails || p.otherDetails || [],
+        highlights: linked.highlights,
+        experiences: linked.experiences || [],
+        countryId: linked.countryId,
+        stateId: linked.stateId,
+        cityId: linked.cityId,
+        locationId: linked.locationId,
+        countryName: linked.country,
+        stateName: linked.state,
+        cityName: linked.city,
+        landmarks: p.landmarks || [],
+        rooms: p.rooms || [],
+        createdAt: p.createdAt
+      };
+    });
 
     res.json(results);
   } catch (err) {
@@ -50,7 +85,7 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
         try { data[field] = JSON.parse(data[field]); } catch (e) { }
       }
     };
-    ['amenityTypes', 'amenities', 'experiences', 'rooms', 'landmarks', 'highlights', 'images', 'videos'].forEach(parseIfString);
+    ['amenityTypes', 'amenities', 'experiences', 'rooms', 'landmarks', 'highlights', 'images', 'videos', 'otherDetails'].forEach(parseIfString);
 
     if (req.files) {
       if (req.files['images']) {
@@ -86,6 +121,7 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
         description: data.aboutProperty || data.description,
         images: Array.isArray(data.images) ? data.images.filter(u => u && !u.startsWith('blob:')) : [],
         rooms: Array.isArray(data.rooms) ? data.rooms : [],
+        otherDetails: Array.isArray(data.otherDetails) ? data.otherDetails : [],
         checkIn: data.checkIn || '3:00 PM',
         checkOut: data.checkOut || '12:00 PM',
         rules: data.rules,
@@ -167,7 +203,7 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
         try { data[field] = JSON.parse(data[field]); } catch (e) { }
       }
     };
-    ['amenityTypes', 'amenities', 'experiences', 'rooms', 'landmarks', 'highlights', 'images', 'videos'].forEach(parseIfString);
+    ['amenityTypes', 'amenities', 'experiences', 'rooms', 'landmarks', 'highlights', 'images', 'videos', 'otherDetails'].forEach(parseIfString);
 
     if (req.files) {
       if (req.files['images']) {
@@ -199,6 +235,7 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
         description: data.aboutProperty || data.description,
         images: Array.isArray(data.images) ? data.images.filter(u => u && !u.startsWith('blob:')) : undefined,
         rooms: Array.isArray(data.rooms) ? data.rooms : undefined,
+        otherDetails: Array.isArray(data.otherDetails) ? data.otherDetails : undefined,
         checkIn: data.checkIn,
         checkOut: data.checkOut,
         rules: data.rules,

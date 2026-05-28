@@ -32,6 +32,7 @@ const propertyMasterSchema = new mongoose.Schema({
     offer: { type: String },
     rules: { type: String }
   }],
+  otherDetails: [{ title: String, text: String }],
 }, { timestamps: true });
 
 export default mongoose.model('PropertyMaster', propertyMasterSchema);

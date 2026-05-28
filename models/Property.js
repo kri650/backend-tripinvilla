@@ -95,6 +95,7 @@ const propertySchema = new mongoose.Schema({
   // -----------------------------
 
   rules: { type: String, default: '• Primary Guest should be atleast 18 years of age.\n• Passport, Aadhaar, Driving License and Govt. ID are accepted as ID proof(s).' },
+  otherDetails: [{ title: String, text: String }],
   area: { type: String, default: '31 sq. ft.' },
   beds: { type: Number, default: 2 },
   status: { type: String, enum: ['Active', 'Pending', 'Inactive', 'Inactive Admin'], default: 'Pending' },
