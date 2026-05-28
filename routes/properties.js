@@ -109,7 +109,8 @@ router.get('/', async (req, res) => {
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit))
       .sort({ priority: -1, hasActiveOffer: -1, createdAt: -1 })
-      .populate('experiences');
+      .populate('experiences')
+      .populate('owner', 'name phone email');
 
     const total = await Property.countDocuments(filter);
 
@@ -119,23 +120,29 @@ router.get('/', async (req, res) => {
       Property.countDocuments({ status: 'Inactive Admin' })
     ]);
 
-    let formattedProperties = propertiesDb.map((p, index) => ({
-      _id: p._id,
-      propertyNo: p.propertyNo || `PR-${1000 + index}`,
-      image: p.images && p.images[0] ? p.images[0] : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60',
-      images: p.images && p.images.length > 0 ? p.images : [],
-      propertyName: p.name,
-      location: `${p.city || ''}${p.state ? ', ' + p.state : ''}`,
-      category: p.type || 'Villa',
-      bestRoomRate: p.price || 1200,
-      rooms: p.bedRooms || 3,
-      guests: p.capacity || 2,
-      rating: p.rating || 4.5,
-      status: p.status || 'Active',
-      hasActiveOffer: p.hasActiveOffer || false,
-      experiences: p.experiences || [],
-      createdAt: p.createdAt
-    }));
+    let formattedProperties = propertiesDb.map((p, index) => {
+      const pObj = p.toObject();
+      return {
+        ...pObj,
+        _id: p._id,
+        propertyNo: p.propertyNo || `PR-${1000 + index}`,
+        image: p.images && p.images[0] ? p.images[0] : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60',
+        images: p.images && p.images.length > 0 ? p.images : [],
+        propertyName: p.name,
+        location: `${p.city || ''}${p.state ? ', ' + p.state : ''}`,
+        category: p.type || 'Villa',
+        bestRoomRate: p.price || 1200,
+        rooms: p.bedRooms || 3,
+        guests: p.capacity || 2,
+        rating: p.rating || 4.5,
+        status: p.status || 'Active',
+        hasActiveOffer: p.hasActiveOffer || false,
+        experiences: p.experiences || [],
+        createdAt: p.createdAt,
+        ownerName: p.owner ? p.owner.name : (p.ownerContact || 'Unknown'),
+        ownerContact: p.owner ? p.owner.phone || p.owner.email : 'No contact'
+      };
+    });
 
     res.json({
       properties: formattedProperties,
@@ -339,7 +346,39 @@ router.post('/', protect, ownerOnly, async (req, res) => {
     };
     const property = await Property.create(propertyData);
 
-    // Removed automatic PropertyRequest creation. Owners will manually add rooms via PropertyRequests.
+    // If admin is creating the property and rooms are provided, save them as approved PropertyRequests
+    if (isAdmin && Array.isArray(body.rooms) && body.rooms.length > 0) {
+      const PropertyRequest = (await import('../models/PropertyRequest.js')).default;
+      let reqCount = await PropertyRequest.countDocuments();
+      
+      const roomPromises = body.rooms.map(async (room, idx) => {
+        reqCount++;
+        return PropertyRequest.create({
+          requestNo: `REQ-${3000 + reqCount}`,
+          property: property._id,
+          property_id: property._id,
+          propertyName: property.name,
+          location: property.location,
+          category: property.type,
+          ownerName: ownerName || 'Admin',
+          ownerContact: ownerContact || 'admin',
+          room_type: room.roomType || 'Deluxe',
+          bed_type: room.bedType || 'Double',
+          price_per_room: Number(room.pricePerNight) || 0,
+          room_image_url: room.imageUrl || '',
+          room_images: room.imageUrl ? [room.imageUrl] : [],
+          amenities_types: room.amenities || [],
+          offers: room.offer ? [room.offer] : [],
+          checkin_time: room.checkIn || '3:00 PM',
+          checkout_time: room.checkOut || '12:00 PM',
+          rules: [{ title: 'Property Rules', points: room.rules ? room.rules.split('\\n') : [] }],
+          admin_status: 'approved',
+          status: 'Accepted'
+        });
+      });
+      await Promise.all(roomPromises);
+    }
+
     const responseObj = property.toObject();
     res.status(201).json({
       ...responseObj,

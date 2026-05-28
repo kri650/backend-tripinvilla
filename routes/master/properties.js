@@ -61,7 +61,7 @@ router.get('/', async (req, res) => {
         stateName: linked.state,
         cityName: linked.city,
         landmarks: p.landmarks || [],
-        rooms: p.rooms || [],
+        rooms: (linked.rooms && linked.rooms.length > 0) ? linked.rooms : (p.rooms || []),
         createdAt: p.createdAt
       };
     });
