@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 const offerSchema = new mongoose.Schema({
   offerId: { type: String, required: true, unique: true },
   property_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Property', required: true },
-  request_id: { type: mongoose.Schema.Types.ObjectId, ref: 'PropertyRequest', required: true },
+  request_id: { type: mongoose.Schema.Types.ObjectId, ref: 'PropertyRequest' },
   
   // Compatibility fields
   propertyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Property' },
