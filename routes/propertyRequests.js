@@ -146,9 +146,16 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
 });
 
 // POST /api/property-requests/admin-direct -> Admin creates an auto-approved room
-router.post('/admin-direct', protect, adminOnly, async (req, res) => {
+import { upload } from '../middleware/upload.js';
+router.post('/admin-direct', protect, adminOnly, upload.array('images', 10), async (req, res) => {
   try {
-    const { property_id, room_type, room_image_url, room_images, bed_type, amenities_types, original_price, price_per_room, checkin_time, checkout_time, offers } = req.body;
+    const { property_id, room_type, room_image_url, bed_type, original_price, price_per_room, checkin_time, checkout_time } = req.body;
+    let { room_images, amenities_types, offers } = req.body;
+    
+    // Parse arrays if sent as strings (FormData)
+    if (typeof room_images === 'string') { try { room_images = JSON.parse(room_images); } catch(e) { room_images = [room_images]; } }
+    if (typeof amenities_types === 'string') { try { amenities_types = JSON.parse(amenities_types); } catch(e) { amenities_types = [amenities_types]; } }
+    if (typeof offers === 'string') { try { offers = JSON.parse(offers); } catch(e) { offers = [offers]; } }
 
     const property = await Property.findById(property_id);
     if (!property) return res.status(404).json({ message: 'Property not found' });
@@ -156,7 +163,9 @@ router.post('/admin-direct', protect, adminOnly, async (req, res) => {
     const count = await PropertyRequest.countDocuments();
     const requestNo = `REQ-${3000 + count + 1}`;
 
-    const imgs = Array.isArray(room_images) && room_images.length > 0 ? room_images : (room_image_url ? [room_image_url] : []);
+    const existingImgs = Array.isArray(room_images) && room_images.length > 0 ? room_images : (room_image_url ? [room_image_url] : []);
+    const uploadedImgs = req.files ? req.files.map(file => file.filename.startsWith('http') ? file.filename : `/uploads/${file.filename}`) : [];
+    const imgs = [...existingImgs, ...uploadedImgs];
 
     const newRoom = await PropertyRequest.create({
       requestNo,
@@ -189,11 +198,19 @@ router.post('/admin-direct', protect, adminOnly, async (req, res) => {
 });
 
 // PUT /api/property-requests/admin-direct/:id -> Admin updates a room
-router.put('/admin-direct/:id', protect, adminOnly, async (req, res) => {
+router.put('/admin-direct/:id', protect, adminOnly, upload.array('images', 10), async (req, res) => {
   try {
-    const { room_type, room_image_url, room_images, bed_type, amenities_types, original_price, price_per_room, checkin_time, checkout_time, offers } = req.body;
+    const { room_type, room_image_url, bed_type, original_price, price_per_room, checkin_time, checkout_time } = req.body;
+    let { room_images, amenities_types, offers } = req.body;
+    
+    // Parse arrays if sent as strings (FormData)
+    if (typeof room_images === 'string') { try { room_images = JSON.parse(room_images); } catch(e) { room_images = [room_images]; } }
+    if (typeof amenities_types === 'string') { try { amenities_types = JSON.parse(amenities_types); } catch(e) { amenities_types = [amenities_types]; } }
+    if (typeof offers === 'string') { try { offers = JSON.parse(offers); } catch(e) { offers = [offers]; } }
 
-    const imgs = Array.isArray(room_images) && room_images.length > 0 ? room_images : (room_image_url ? [room_image_url] : []);
+    const existingImgs = Array.isArray(room_images) && room_images.length > 0 ? room_images : (room_image_url ? [room_image_url] : []);
+    const uploadedImgs = req.files ? req.files.map(file => file.filename.startsWith('http') ? file.filename : `/uploads/${file.filename}`) : [];
+    const imgs = [...existingImgs, ...uploadedImgs];
 
     const updated = await PropertyRequest.findByIdAndUpdate(
       req.params.id,
