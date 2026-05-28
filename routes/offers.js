@@ -225,4 +225,45 @@ router.delete('/:id', protect, ownerOnly, async (req, res) => {
   }
 });
 
+// GET single offer
+// GET /api/offers/:id
+router.get('/:id', async (req, res) => {
+  try {
+    const offer = await Offer.findById(req.params.id);
+    if (!offer) return res.status(404).json({ message: 'Offer not found' });
+    res.json(offer);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// UPDATE offer
+// PUT /api/offers/:id
+router.put('/:id', protect, ownerOnly, async (req, res) => {
+  try {
+    const { property_id, food_type, offer_date, offer_time, offer_percent, description, status } = req.body;
+    
+    const offerDateObj = new Date(offer_date);
+    
+    const offer = await Offer.findByIdAndUpdate(req.params.id, {
+      property_id,
+      food_type,
+      offer_date: offerDateObj,
+      offer_time,
+      offer_percent,
+      description,
+      status,
+      dateFrom: offerDateObj,
+      dateTo: offerDateObj,
+      foods: food_type,
+      offerPercent: parseFloat(offer_percent) || 0
+    }, { new: true });
+    
+    if (!offer) return res.status(404).json({ message: 'Offer not found' });
+    res.json(offer);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 export default router;
