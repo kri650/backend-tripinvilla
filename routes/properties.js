@@ -160,6 +160,46 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET recommended properties (Admins or Subscribed Owners)
+router.get('/recommended', async (req, res) => {
+  try {
+    const { default: User } = await import('../models/User.js');
+    const eligibleUsers = await User.find({
+      $or: [
+        { role: { $in: ['admin', 'super_admin'] } },
+        { isPremium: true },
+        { 'subscription.isActive': true }
+      ]
+    }).select('_id');
+
+    const eligibleUserIds = eligibleUsers.map(u => u._id);
+
+    const properties = await Property.find({ owner: { $in: eligibleUserIds }, status: 'Active' })
+      .populate('owner', 'name phone email role isPremium subscription')
+      .limit(20)
+      .sort({ createdAt: -1 });
+
+    const formatted = properties.map((p, index) => {
+      const pObj = p.toObject();
+      return {
+        ...pObj,
+        id: p._id,
+        name: p.name,
+        location: `${p.city || ''}${p.state ? ', ' + p.state : ''}`,
+        price: p.price || 1200,
+        img: p.images && p.images[0] ? p.images[0] : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60',
+        guests: p.capacity || 3,
+        rooms: p.bedRooms || 1,
+        area: pObj.area || '300 sq. ft.'
+      };
+    });
+
+    res.json(formatted);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET top 10 by bookings
 router.get('/top', async (req, res) => {
   try {

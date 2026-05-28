@@ -23,23 +23,43 @@ router.get('/frontend', async (req, res) => {
       status: { $in: ['active', 'Active'] },
       offer_date: { $gte: today }
     })
-      .populate('property_id')
+      .populate({
+        path: 'property_id',
+        populate: {
+          path: 'owner',
+          select: 'role isPremium subscription'
+        }
+      })
       .sort({ offer_date: 1 });
 
-    const formatted = offers.map(o => {
+    let formatted = offers.map(o => {
       const obj = o.toObject();
+      
+      const owner = o.property_id?.owner;
+      let score = 0;
+      if (owner) {
+        if (owner.role === 'admin' || owner.role === 'super_admin') score = 2;
+        else if (owner.isPremium || owner.subscription?.isActive) score = 1;
+      }
+      
       return {
         ...obj,
         id: o._id,
         propertyName: o.property_id?.name || o.propertyName,
         location: o.property_id?.location || o.location,
+        image: o.property_id?.images?.[0] || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60',
         category: o.category,
         room: o.room_type,
         foods: o.food_type,
         offerPercent: o.offer_percent,
-        status: o.status
+        status: o.status,
+        _score: score
       };
     });
+    
+    // Sort descending by score, then keep original sort order
+    formatted.sort((a, b) => b._score - a._score);
+    formatted.forEach(o => delete o._score);
 
     res.json(formatted);
   } catch (err) {
