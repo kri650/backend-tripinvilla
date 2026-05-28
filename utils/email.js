@@ -178,5 +178,6 @@ export const sendPasswordResetOTP = async (email, name, otpCode) => {
     console.log('Password Reset OTP sent successfully to:', email);
   } catch (error) {
     console.error('Error sending password reset OTP:', error);
+    throw new Error('Failed to send email. Please check SMTP configuration.');
   }
 };
