@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import crypto from 'crypto';
 
+import { sendPasswordResetOTP } from '../utils/email.js';
+
 const router = express.Router();
 
 const getServerBaseUrl = () => {
@@ -78,6 +80,49 @@ router.post('/login', async (req, res) => {
     await user.save();
     const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role, phone: user.phone } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Forgot Password - Send OTP
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: 'User with this email does not exist.' });
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.resetOtp = otp;
+    user.resetOtpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+    await user.save();
+
+    console.log(`[DEV MODE] OTP for ${email}: ${otp}`);
+    await sendPasswordResetOTP(email, user.name, otp);
+
+    res.json({ message: 'OTP sent successfully to your email.' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Reset Password - Verify OTP & Set New Password
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    if (user.resetOtp !== otp || new Date() > new Date(user.resetOtpExpires)) {
+      return res.status(400).json({ message: 'Invalid or expired OTP.' });
+    }
+
+    user.password = newPassword;
+    user.resetOtp = undefined;
+    user.resetOtpExpires = undefined;
+    await user.save();
+
+    res.json({ message: 'Password reset successfully. You can now login.' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

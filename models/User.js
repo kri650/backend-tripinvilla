@@ -36,7 +36,8 @@ const userSchema = new mongoose.Schema({
   },
   lastLogin: { type: Date },
   status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
-  wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Property' }],
+  resetOtp: { type: String },
+  resetOtpExpires: { type: Date },
 }, { timestamps: true });
 
 userSchema.pre('save', async function(next) {
