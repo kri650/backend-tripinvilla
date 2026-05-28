@@ -48,9 +48,10 @@ export const checkPhotoLimit = async (req, res, next) => {
     }
 
     const isSubscribed =
-      owner.subscription?.isActive &&
+      owner.isPremium ||
+      (owner.subscription?.isActive &&
       owner.subscription?.expiresAt &&
-      new Date() < new Date(owner.subscription.expiresAt);
+      new Date() < new Date(owner.subscription.expiresAt));
 
     if (isSubscribed) {
       req.owner = owner;
