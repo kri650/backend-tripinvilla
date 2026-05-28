@@ -101,6 +101,7 @@ const propertySchema = new mongoose.Schema({
   status: { type: String, enum: ['Active', 'Pending', 'Inactive', 'Inactive Admin'], default: 'Pending' },
   rating: { type: Number, default: 0, min: 0, max: 5 },
   totalBookings: { type: Number, default: 0 },
+  reviewsCount: { type: Number, default: 0 },
   hasActiveOffer: { type: Boolean, default: false },
   owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 

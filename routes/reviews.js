@@ -79,9 +79,7 @@ router.post('/:property_id', protect, async (req, res) => {
     const newAvg = allReviews.reduce((sum, rev) => sum + rev.rating, 0) / newCount;
     
     property.rating = Math.round(newAvg * 10) / 10;
-    // Store review count in totalBookings if that's what's used, or maybe add a new field
-    // It's cleaner to just update rating and let frontend fetch count, or we can use totalBookings as a proxy if we must. 
-    // Wait, let's just let it be. Rating is enough for the property list, totalBookings might be used for something else.
+    property.reviewsCount = newCount;
     await property.save();
 
     res.status(201).json(review);
