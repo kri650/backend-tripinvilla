@@ -18,6 +18,20 @@ const propertyMasterSchema = new mongoose.Schema({
     landmark_type: { type: String },
     landmark_image_url: { type: String }
   }],
+  rooms: [{
+    roomType: { type: String },
+    roomName: { type: String },
+    imageUrl: { type: String },
+    pricePerNight: { type: Number },
+    maxGuests: { type: Number },
+    bedType: { type: String },
+    count: { type: Number },
+    amenities: [{ type: String }],
+    checkIn: { type: String },
+    checkOut: { type: String },
+    offer: { type: String },
+    rules: { type: String }
+  }],
 }, { timestamps: true });
 
 export default mongoose.model('PropertyMaster', propertyMasterSchema);

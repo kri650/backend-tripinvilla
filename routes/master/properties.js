@@ -27,6 +27,7 @@ router.get('/', async (req, res) => {
       aboutProperty: p.aboutProperty,
       status: p.status,
       landmarks: p.landmarks || [],
+      rooms: p.rooms || [],
       createdAt: p.createdAt
     }));
 
@@ -111,7 +112,39 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
       if (data.owner && data.owner.toString().length === 24) {
         propData.owner = data.owner;
       }
-      await Property.create({ _id: newPropertyMaster._id, ...propData });
+      const createdProp = await Property.create({ _id: newPropertyMaster._id, ...propData });
+
+      // Sync rooms to PropertyRequest
+      if (Array.isArray(data.rooms) && data.rooms.length > 0) {
+        const PropertyRequest = (await import('../../models/PropertyRequest.js')).default;
+        let reqCount = await PropertyRequest.countDocuments();
+        const roomPromises = data.rooms.map(async (room, idx) => {
+          reqCount++;
+          return PropertyRequest.create({
+            requestNo: `REQ-${3000 + reqCount}`,
+            property: createdProp._id,
+            property_id: createdProp._id,
+            propertyName: createdProp.name,
+            location: createdProp.location,
+            category: createdProp.type,
+            ownerName: data.ownerName || 'Admin',
+            ownerContact: data.ownerContact || 'admin',
+            room_type: room.roomType || 'Deluxe',
+            bed_type: room.bedType || 'Double',
+            price_per_room: Number(room.pricePerNight) || 0,
+            room_image_url: room.imageUrl || '',
+            room_images: room.imageUrl ? [room.imageUrl] : [],
+            amenities_types: room.amenities || [],
+            offers: room.offer ? [room.offer] : [],
+            checkin_time: room.checkIn || '3:00 PM',
+            checkout_time: room.checkOut || '12:00 PM',
+            rules: [{ title: 'Property Rules', points: room.rules ? room.rules.split('\\n') : [] }],
+            admin_status: 'approved',
+            status: 'Accepted'
+          });
+        });
+        await Promise.all(roomPromises);
+      }
     } catch (err) {
       console.error("Error syncing Property:", err.message);
     }
@@ -192,7 +225,56 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
 
       // Remove undefined fields
       Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
-      await Property.findByIdAndUpdate(req.params.id, updateData);
+      const updatedProp = await Property.findByIdAndUpdate(req.params.id, updateData, { new: true });
+
+      // Sync new rooms to PropertyRequest if any rooms were sent
+      // Since it's PUT, we'll delete old auto-approved rooms and recreate them to keep it simple and perfectly synced
+      if (Array.isArray(data.rooms) && updatedProp) {
+        const PropertyRequest = (await import('../../models/PropertyRequest.js')).default;
+        
+        // Remove all old approved rooms created by admin (or just all approved rooms)
+        // Or better yet, we just add missing ones. To be safe, we'll only wipe rooms that have no image/simple stuff, 
+        // wait, wiping might delete manually added rooms. 
+        // Let's just create them if they don't exist by room name.
+        const existingRooms = await PropertyRequest.find({ property: req.params.id });
+        
+        const roomPromises = [];
+        let reqCount = await PropertyRequest.countDocuments();
+
+        for (const room of data.rooms) {
+          const roomType = room.roomType || 'Deluxe';
+          // Check if it already exists
+          const exists = existingRooms.find(r => r.room_type === roomType && r.price_per_room === Number(room.pricePerNight));
+          if (!exists) {
+            reqCount++;
+            roomPromises.push(
+              PropertyRequest.create({
+                requestNo: `REQ-${3000 + reqCount}`,
+                property: updatedProp._id,
+                property_id: updatedProp._id,
+                propertyName: updatedProp.name,
+                location: updatedProp.location,
+                category: updatedProp.type,
+                ownerName: data.ownerName || 'Admin',
+                ownerContact: data.ownerContact || 'admin',
+                room_type: roomType,
+                bed_type: room.bedType || 'Double',
+                price_per_room: Number(room.pricePerNight) || 0,
+                room_image_url: room.imageUrl || '',
+                room_images: room.imageUrl ? [room.imageUrl] : [],
+                amenities_types: room.amenities || [],
+                offers: room.offer ? [room.offer] : [],
+                checkin_time: room.checkIn || '3:00 PM',
+                checkout_time: room.checkOut || '12:00 PM',
+                rules: [{ title: 'Property Rules', points: room.rules ? room.rules.split('\\n') : [] }],
+                admin_status: 'approved',
+                status: 'Accepted'
+              })
+            );
+          }
+        }
+        await Promise.all(roomPromises);
+      }
     } catch (err) { console.error('Property sync update error:', err.message); }
 
     if (!property) return res.status(404).json({ message: 'Property not found' });
