@@ -159,7 +159,14 @@ router.get('/top-properties', async (req, res) => {
 // GET /api/dashboard/recent-enquiries
 router.get('/recent-enquiries', async (req, res) => {
   try {
-    const enquiriesDb = await Enquiry.find().sort({ createdAt: -1 }).limit(10).populate('property_id', 'name');
+    const { month, year } = req.query;
+    let query = {};
+    if (month && year) {
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 1);
+      query.createdAt = { $gte: startDate, $lt: endDate };
+    }
+    const enquiriesDb = await Enquiry.find(query).sort({ createdAt: -1 }).limit(10).populate('property_id', 'name');
     const formatted = enquiriesDb.map((e, index) => {
       const dateObj = new Date(e.createdAt || Date.now());
       const datesAndTime = dateObj.toLocaleString('en-IN', {
