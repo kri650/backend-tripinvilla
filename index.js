@@ -82,6 +82,7 @@ import amenitiesMasterRoutes from './routes/master/amenities.js';
 import pricingRuleRoutes from './routes/pricingRules.js';
 import subscriptionRoutes from './routes/subscription.js';
 import searchRoutes from './routes/searchRoutes.js';
+import supportVideoRoutes from './routes/supportVideos.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -127,6 +128,7 @@ app.use('/api/masters/destinations', destinationMasterRoutes);
 app.use('/api/masters/experiences', experienceMasterRoutes);
 app.use('/api/admin/experiences', experienceMasterRoutes);
 app.use('/api/pricing-rules', pricingRuleRoutes);
+app.use('/api/support-videos', supportVideoRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date() }));

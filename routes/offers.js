@@ -111,6 +111,15 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
 // GET all offers (legacy support)
 router.get('/', async (req, res) => {
   try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Auto-expire past active offers
+    await Offer.updateMany(
+      { offer_date: { $lt: today }, status: { $in: ['active', 'Active'] } },
+      { status: 'expired' }
+    );
+
     const offers = await Offer.find()
       .populate('property_id', 'name location city type')
       .sort({ createdAt: -1 });
