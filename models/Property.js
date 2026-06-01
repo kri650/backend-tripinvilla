@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 const propertySchema = new mongoose.Schema({
   propertyNo: { type: String },
   name: { type: String, required: true, trim: true },
-  type: { type: String, enum: ['Apartment', 'Villa', 'Resort', 'Homestay', 'Cottage', 'Hotel', 'Motel', 'Bungalow', 'Farmhouse', 'Others'], required: true },
+  type: { type: String, required: true },
   location: { type: String, required: true },
   full_address: { type: String },
   latitude: { type: Number },
