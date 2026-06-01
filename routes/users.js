@@ -7,6 +7,9 @@ const router = express.Router();
 // GET current user profile
 router.get('/profile', protect, async (req, res) => {
   try {
+    if (req.user.id && req.user.id.toString().startsWith('fake_')) {
+      return res.json(req.user);
+    }
     const user = await User.findById(req.user.id).select('-password').populate('wishlist');
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
@@ -19,6 +22,9 @@ router.get('/profile', protect, async (req, res) => {
 router.put('/profile', protect, async (req, res) => {
   try {
     const { name, email, phone, avatar, company, pan, bank, accountNum, ifsc, address, city, state, pincode, citizenship, residence, emergencyName, emergencyPhone, emergencyEmail, role } = req.body;
+    if (req.user.id && req.user.id.toString().startsWith('fake_')) {
+      return res.json({ message: 'Cannot update fake profile' });
+    }
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
