@@ -75,15 +75,17 @@ function buildFilter(params) {
         // Skip common stop words that might overly restrict results
         if (['in', 'at', 'on', 'the', 'for', 'a', 'an', 'and'].includes(term.toLowerCase())) return;
         
+        const singularTerm = term.endsWith('s') && term.length > 3 ? term.slice(0, -1) : term;
+        
         filter.$and.push({
           $or: [
             { name: new RegExp(term, "i") },
             { city: new RegExp(term, "i") },
             { state: new RegExp(term, "i") },
             { location: new RegExp(term, "i") },
-            { type: new RegExp(term, "i") },
-            { category: new RegExp(term, "i") },
-            { description: new RegExp(term, "i") }
+            { type: new RegExp(singularTerm, "i") },
+            { category: new RegExp(singularTerm, "i") },
+            { description: new RegExp(singularTerm, "i") }
           ]
         });
       });
