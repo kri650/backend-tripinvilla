@@ -3,6 +3,8 @@ import PropertyMaster from '../../models/PropertyMaster.js';
 import PropertyExperienceTag from '../../models/PropertyExperienceTag.js';
 import Property from '../../models/Property.js';
 import { upload } from '../../middleware/upload.js';
+import PropertyTypeMaster from '../../models/PropertyTypeMaster.js';
+import RoomTypeMaster from '../../models/RoomTypeMaster.js';
 
 const router = express.Router();
 
@@ -105,11 +107,18 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
 
     // Also create the actual Property for guest website visibility
     try {
+      // Auto-add property type to master if missing
+      if (data.propertyType) {
+        const existingType = await PropertyTypeMaster.findOne({ name: new RegExp('^' + data.propertyType + '$', 'i') });
+        if (!existingType) {
+          await PropertyTypeMaster.create({ name: data.propertyType, status: 'Active' });
+        }
+      }
+
       const propData = {
         propertyNo: `PM-${100 + count + 1}`,
         name: data.propertyName || 'Unnamed Property',
-        type: ['Villa', 'Resort', 'Homestay', 'Cottage', 'Hotel', 'Apartment', 'Motel', 'Bungalow', 'Farmhouse', 'Others'].includes(data.propertyType)
-          ? data.propertyType : 'Homestay',
+        type: data.propertyType || 'Homestay',
         location: data.location || 'Unknown',
         city: data.cityName || data.city || data.location || 'Unknown',
         state: data.stateName || data.state,
@@ -155,6 +164,13 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
         const PropertyRequest = (await import('../../models/PropertyRequest.js')).default;
         let reqCount = await PropertyRequest.countDocuments();
         const roomPromises = data.rooms.map(async (room, idx) => {
+          const roomType = room.roomType || 'Deluxe';
+          // Auto-add room type to master if missing
+          const existingRoomType = await RoomTypeMaster.findOne({ name: new RegExp('^' + roomType + '$', 'i') });
+          if (!existingRoomType) {
+            await RoomTypeMaster.create({ name: roomType, status: 'Active' });
+          }
+
           reqCount++;
           return PropertyRequest.create({
             requestNo: `REQ-${3000 + reqCount}`,
@@ -165,7 +181,7 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
             category: createdProp.type,
             ownerName: data.ownerName || 'Admin',
             ownerContact: data.ownerContact || 'admin',
-            room_type: room.roomType || 'Deluxe',
+            room_type: roomType,
             bed_type: room.bedType || 'Double',
             price_per_room: Number(room.pricePerNight) || 0,
             room_image_url: room.imageUrl || '',
@@ -220,10 +236,16 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
 
     // Also update the actual Property
     try {
+      if (data.propertyType) {
+        const existingType = await PropertyTypeMaster.findOne({ name: new RegExp('^' + data.propertyType + '$', 'i') });
+        if (!existingType) {
+          await PropertyTypeMaster.create({ name: data.propertyType, status: 'Active' });
+        }
+      }
+
       const updateData = {
         name: data.propertyName,
-        type: ['Villa', 'Resort', 'Homestay', 'Cottage', 'Hotel', 'Apartment', 'Motel', 'Bungalow', 'Farmhouse', 'Others'].includes(data.propertyType)
-          ? data.propertyType : undefined,
+        type: data.propertyType || undefined,
         location: data.location,
         city: data.cityName || data.city || data.location,
         state: data.stateName || data.state,
@@ -280,6 +302,12 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
 
         for (const room of data.rooms) {
           const roomType = room.roomType || 'Deluxe';
+          // Auto-add room type to master if missing
+          const existingRoomType = await RoomTypeMaster.findOne({ name: new RegExp('^' + roomType + '$', 'i') });
+          if (!existingRoomType) {
+            await RoomTypeMaster.create({ name: roomType, status: 'Active' });
+          }
+
           // Check if it already exists
           const exists = existingRooms.find(r => r.room_type === roomType && r.price_per_room === Number(room.pricePerNight));
           if (!exists) {
