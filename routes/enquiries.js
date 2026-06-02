@@ -20,6 +20,9 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
         .populate('property_id', 'name location city type')
         .sort({ createdAt: -1 });
     } else {
+      if (req.user._id && req.user._id.toString().startsWith('fake_')) {
+        return res.json([]);
+      }
       const properties = await Property.find({ owner: req.user._id }).select('_id');
       const propertyIds = properties.map(p => p._id);
       enquiries = await Enquiry.find({ property_id: { $in: propertyIds } })
@@ -52,6 +55,9 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
 // GET /api/enquiries/user
 router.get('/user', protect, async (req, res) => {
   try {
+    if (req.user._id && req.user._id.toString().startsWith("fake_")) {
+      return res.json([]);
+    }
     const emailQuery = req.user.email ? { email: { $regex: new RegExp(`^${req.user.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } } : null;
     const searchFilter = emailQuery 
       ? { $or: [ { user_id: req.user._id }, emailQuery ] } 
@@ -82,6 +88,9 @@ router.get('/owner/filter', protect, ownerOnly, async (req, res) => {
 
     const propertyFilter = {};
     if (!['admin', 'super_admin'].includes(req.user?.role)) {
+      if (req.user._id && req.user._id.toString().startsWith('fake_')) {
+        return res.json([]);
+      }
       propertyFilter.owner = req.user._id;
     }
     if (property_type) {
