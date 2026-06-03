@@ -20,11 +20,18 @@ router.get('/rating/:property_id', async (req, res) => {
     const reviews = await PropertyReview.find({ property_id: req.params.property_id });
     const count = reviews.length;
     let avg = 0;
+    const breakdown = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+
     if (count > 0) {
       avg = reviews.reduce((sum, rev) => sum + rev.rating, 0) / count;
       avg = Math.round(avg * 10) / 10;
+      reviews.forEach(r => {
+        const star = Math.round(r.rating);
+        if (breakdown[star] !== undefined) breakdown[star]++;
+      });
     }
-    res.json({ avg, count, label: getRatingLabel(avg) });
+
+    res.json({ avg, count, label: count > 0 ? getRatingLabel(avg) : 'No Reviews', breakdown });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
