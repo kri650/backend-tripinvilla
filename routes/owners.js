@@ -20,7 +20,7 @@ const makeOwnerNo = (userId) => {
 // GET /api/owners
 router.get('/', async (req, res) => {
   try {
-    const { search, type, dateFrom, dateTo, date } = req.query;
+    const { search, type, dateFrom, dateTo, date, location } = req.query;
 
     let ownersQuery = { role: 'owner' };
     
@@ -36,15 +36,23 @@ router.get('/', async (req, res) => {
     const ownersDb = await User.find(ownersQuery).select('-password').sort({ createdAt: -1 });
 
     const ownerIds = ownersDb.map(o => o._id);
-    const props = await Property.find({ owner: { $in: ownerIds } }).select('name owner type createdAt');
+    const props = await Property.find({ owner: { $in: ownerIds } }).select('name owner type createdAt location city state');
     
     // If type or date is provided, filter the valid owners based on their properties
     let validOwnerIds = new Set(ownerIds.map(id => id.toString()));
 
-    if (type || dateFrom || dateTo || date) {
+    if (type || dateFrom || dateTo || date || location) {
       let filteredProps = props;
       if (type) {
         filteredProps = filteredProps.filter(p => p.type === type);
+      }
+      if (location) {
+        const locLower = location.toLowerCase();
+        filteredProps = filteredProps.filter(p => 
+          (p.location && p.location.toLowerCase().includes(locLower)) ||
+          (p.city && p.city.toLowerCase().includes(locLower)) ||
+          (p.state && p.state.toLowerCase().includes(locLower))
+        );
       }
       
       const startParam = dateFrom || date;
