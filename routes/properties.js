@@ -3,6 +3,7 @@ import Property from '../models/Property.js';
 import PropertyRequest from '../models/PropertyRequest.js';
 import PropertyLandmark from '../models/PropertyLandmark.js';
 import { protect, ownerOnly } from '../middleware/auth.js';
+import { syncPropertyMasters } from '../utils/masterSync.js';
 
 const router = express.Router();
 
@@ -385,6 +386,9 @@ router.post('/', protect, ownerOnly, async (req, res) => {
       priority: isPremiumOwner || isAdmin ? 1 : 0
     };
     const property = await Property.create(propertyData);
+    
+    // Sync masters async (fire and forget is okay, but await ensures it happens before respond)
+    await syncPropertyMasters(propertyData);
 
     // If admin is creating the property and rooms are provided, save them as approved PropertyRequests
     if (isAdmin && Array.isArray(body.rooms) && body.rooms.length > 0) {
@@ -461,6 +465,9 @@ router.put('/:id', protect, ownerOnly, async (req, res) => {
 
     Object.assign(property, body);
     await property.save();
+    
+    // Sync masters async
+    await syncPropertyMasters(body);
     
     const responseObj = property.toObject();
     res.json({

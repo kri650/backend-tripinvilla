@@ -16,7 +16,8 @@ router.get('/active', async (req, res) => {
     for (const exp of experiencesDb) {
       const query = {
         $or: [
-          { experiences: exp._id }
+          { experiences: exp._id },
+          { experiences: { $regex: `^${exp.experienceName}$`, $options: 'i' } }
         ]
       };
       if (mongoose.isValidObjectId(exp.experienceName)) {
@@ -50,7 +51,8 @@ router.get('/', async (req, res) => {
     for (const exp of experiencesDb) {
       const query = {
         $or: [
-          { experiences: exp._id }
+          { experiences: exp._id },
+          { experiences: { $regex: `^${exp.experienceName}$`, $options: 'i' } }
         ]
       };
       if (mongoose.isValidObjectId(exp.experienceName)) {

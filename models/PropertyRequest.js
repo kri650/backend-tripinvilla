@@ -21,6 +21,7 @@ const propertyRequestSchema = new mongoose.Schema({
   amenities_types: [{ type: String }],
   price_per_room: { type: Number },
   original_price: { type: Number },
+  tax_amount: { type: Number },
   checkin_time: { type: String },
   checkout_time: { type: String },
   offers: [{ type: String }],

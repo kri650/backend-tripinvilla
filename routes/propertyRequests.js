@@ -2,6 +2,7 @@ import express from 'express';
 import PropertyRequest from '../models/PropertyRequest.js';
 import Property from '../models/Property.js';
 import { protect, ownerOnly, adminOnly } from '../middleware/auth.js';
+import { syncRoomMasters } from '../utils/masterSync.js';
 
 const router = express.Router();
 
@@ -191,6 +192,8 @@ router.post('/admin-direct', protect, adminOnly, upload.array('images', 10), asy
       status: 'Accepted'
     });
 
+    await syncRoomMasters({ room_type, amenities_types, experiences: req.body.experiences });
+
     res.status(201).json(newRoom);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -231,6 +234,9 @@ router.put('/admin-direct/:id', protect, adminOnly, upload.array('images', 10), 
     );
 
     if (!updated) return res.status(404).json({ message: 'Room not found' });
+    
+    await syncRoomMasters({ room_type, amenities_types, experiences: req.body.experiences });
+    
     res.json(updated);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -306,7 +312,53 @@ router.post('/', protect, ownerOnly, async (req, res) => {
       status: 'pending' // compatibility
     });
     
+    await syncRoomMasters(req.body);
+    
     res.status(201).json(newRequest);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+// PUT /api/property-requests/:id -> Owner edits their request
+router.put('/:id', protect, ownerOnly, async (req, res) => {
+  try {
+    const { room_type, room_image_url, bed_type, amenities_types, original_price, price_per_room, checkin_time, checkout_time, offers, rules, tax_amount } = req.body;
+    
+    const request = await PropertyRequest.findById(req.params.id);
+    if (!request) return res.status(404).json({ message: 'Request not found' });
+    
+    // Ensure the owner owns the associated property
+    const property = await Property.findOne({ _id: request.property || request.property_id, owner: req.user._id });
+    if (!property) return res.status(403).json({ message: 'Access denied' });
+
+    const updated = await PropertyRequest.findByIdAndUpdate(
+      req.params.id,
+      {
+        room_type,
+        room_image_url,
+        bed_type,
+        amenities_types: Array.isArray(amenities_types) ? amenities_types : [],
+        original_price: original_price ? Number(original_price) : undefined,
+        price_per_room: Number(price_per_room),
+        tax_amount: tax_amount ? Number(tax_amount) : undefined,
+        priceByOwner: Number(price_per_room),
+        checkin_time,
+        checkout_time,
+        offers: Array.isArray(offers) ? offers : [],
+        rules,
+        admin_status: 'pending', // reset to pending on edit
+        status: 'pending'
+      },
+      { new: true }
+    );
+    
+    // Update the property status to Pending since room changed
+    await Property.findByIdAndUpdate(property._id, { status: 'Pending' });
+
+    await syncRoomMasters(req.body);
+
+    res.json(updated);
   } catch (err) {
     res.status(400).json({ message: err.message });
   }

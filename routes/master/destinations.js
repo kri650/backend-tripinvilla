@@ -1,6 +1,6 @@
 import express from 'express';
 import DestinationMaster from '../../models/DestinationMaster.js';
-import PropertyMaster from '../../models/PropertyMaster.js';
+import Property from '../../models/Property.js';
 import { upload } from '../../middleware/upload.js';
 
 const router = express.Router();
@@ -17,7 +17,7 @@ router.get('/', async (req, res) => {
     let results = [];
 
     for (const dest of destinationsDb) {
-      const count = await PropertyMaster.countDocuments({ location: { $regex: dest.destinationName, $options: 'i' } });
+      const count = await Property.countDocuments({ location: { $regex: dest.destinationName, $options: 'i' } });
       results.push({
         _id: dest._id,
         destinationName: dest.destinationName,
