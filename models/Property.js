@@ -94,7 +94,7 @@ const propertySchema = new mongoose.Schema({
   distanceFromCity: { type: String },
   // -----------------------------
 
-  rules: { type: String, default: '• Primary Guest should be atleast 18 years of age.\n• Passport, Aadhaar, Driving License and Govt. ID are accepted as ID proof(s).' },
+  rules: { type: String, default: '' },
   otherDetails: [{ title: String, text: String }],
   area: { type: String, default: '31 sq. ft.' },
   beds: { type: Number, default: 2 },

@@ -7,7 +7,7 @@ const pricingRuleSchema = new mongoose.Schema({
   bedType: { type: String, default: 'King Size 1' },
   amenities: { type: String, default: 'Barbeque, Pub & 2 others' },
   price: { type: String, default: '₹1,233 per night' },
-  rules: { type: String, default: 'Must Read Rules\n• Primary Guest should be atleast 18 years of age.' },
+  rules: { type: String, default: '' },
   checkIn: { type: String, default: '9:00 AM' },
   checkOut: { type: String, default: '12:00 PM' },
   offer: { type: String, default: '20% Off' },
