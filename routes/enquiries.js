@@ -212,31 +212,30 @@ router.post('/', async (req, res) => {
   }
 });
 
-// POST /api/enquiries/send-otp (Send secure OTP code via SMS / Fast2SMS)
+// POST /api/enquiries/send-otp (Send secure OTP code via MSG91)
 router.post('/send-otp', async (req, res) => {
   try {
     const { email, name, phone, propertyName } = req.body;
     
     if (!name || !phone) {
-      return res.status(400).json({ success: false, message: 'Name and Phone Number are required to request OTP.' });
+      return res.status(400).json({ success: false, message: 'Name and Phone Number are required.' });
     }
 
-    // Normalize phone: strip non-digits, remove leading 91 for 12-digit numbers
     let cleanPhone = phone.replace(/[^0-9]/g, '');
     if (cleanPhone.startsWith('91') && cleanPhone.length === 12) {
       cleanPhone = cleanPhone.substring(2);
     }
     if (cleanPhone.length !== 10) {
-      return res.status(400).json({ success: false, message: 'Please enter a valid 10-digit Indian mobile number.' });
+      return res.status(400).json({ success: false, message: 'Valid 10-digit Indian number required.' });
     }
 
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const MSG91_API_KEY = process.env.MSG91_API_KEY || 'dummy_msg91_key';
+    const TEMPLATE_ID = process.env.MSG91_TEMPLATE_ID || 'dummy_template';
 
-    // Store OTP keyed by phone number (TTL auto-expires after 5 minutes)
+    // Store OTP context keyed by phone number
     await OTP.findOneAndUpdate(
       { phone: cleanPhone },
       { 
-        otp: otpCode,
         name,
         email: email ? email.toLowerCase().trim() : '',
         propertyName,
@@ -245,61 +244,37 @@ router.post('/send-otp', async (req, res) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    console.log(`[OTP] Generated OTP ${otpCode} for phone ${cleanPhone}`);
+    if (MSG91_API_KEY === 'dummy_msg91_key') {
+      console.log(`[MOCK] MSG91 OTP request simulated for 91${cleanPhone}`);
+      return res.json({ success: true, channel: 'sms', message: 'OTP sent successfully (Mock)' });
+    }
 
-    let sentViaSMS = false;
-
-    if (process.env.FAST2SMS_API_KEY) {
-      try {
-        const smsResult = await sendSMSOTP(cleanPhone, otpCode);
-        if (smsResult.success) {
-          sentViaSMS = true;
-          console.log(`[OTP] ✅ SMS sent successfully to ${cleanPhone}`);
-        } else {
-          console.error('[OTP] Fast2SMS returned failure:', smsResult);
+    const axios = (await import('axios')).default;
+    const response = await axios.post(
+      'https://control.msg91.com/api/v5/otp',
+      {
+        template_id: TEMPLATE_ID,
+        mobile: `91${cleanPhone}`,
+        otp_length: 6,
+        otp_expiry: 5
+      },
+      {
+        headers: {
+          'authkey': MSG91_API_KEY,
+          'Content-Type': 'application/json'
         }
-      } catch (smsErr) {
-        console.error('[OTP] Fast2SMS dispatch failed:', smsErr.message);
       }
-    } else {
-      console.warn('[OTP] FAST2SMS_API_KEY not set. Cannot send SMS.');
-    }
+    );
 
-    // Email fallback if SMS fails or no API key is configured
-    if (!sentViaSMS && email) {
-      console.log('[OTP] No SMS gateway configured or SMS failed — sending OTP via email fallback...');
-      await sendOTPEmail(email, name, otpCode, propertyName);
-      return res.json({ 
-        success: true, 
-        channel: 'email',
-        message: `A 6-digit verification code has been sent to your email address.`
-      });
-    }
-
-    if (!sentViaSMS && !email) {
-      // Log OTP to console for debugging when SMS fails and no email provided
-      console.log(`\n========================================`);
-      console.log(`📱 OTP FOR ${cleanPhone}: ${otpCode}`);
-      console.log(`(SMS dispatch failed — check Fast2SMS API key/balance)`);
-      console.log(`========================================\n`);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Failed to send SMS. Please check your phone number and try again.'
-      });
-    }
-
-    res.json({ 
-      success: true,
-      channel: 'sms',
-      message: `A 6-digit verification code has been sent to your phone number via SMS.`
-    });
+    console.log('[MSG91] OTP Sent:', response.data);
+    res.json({ success: true, channel: 'sms', message: 'OTP sent successfully via MSG91' });
   } catch (err) {
-    console.error('Send OTP Endpoint Error:', err);
+    console.error('Send OTP Error:', err?.response?.data || err.message);
     res.status(500).json({ success: false, message: 'Failed to dispatch verification code. Please try again.' });
   }
 });
 
-// POST /api/enquiries/verify-otp (Verify OTP code by phone and create enquiry)
+// POST /api/enquiries/verify-otp (Verify OTP code by phone via MSG91 and email owner)
 router.post('/verify-otp', async (req, res) => {
   try {
     const { phone, otp } = req.body;
@@ -308,83 +283,100 @@ router.post('/verify-otp', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Phone number and OTP code are required.' });
     }
 
-    // Normalize phone
     let cleanPhone = phone.replace(/[^0-9]/g, '');
     if (cleanPhone.startsWith('91') && cleanPhone.length === 12) {
       cleanPhone = cleanPhone.substring(2);
     }
 
-    const dbRecord = await OTP.findOne({ phone: cleanPhone });
+    const MSG91_API_KEY = process.env.MSG91_API_KEY || 'dummy_msg91_key';
+    let isVerified = false;
 
-    if (!dbRecord) {
-      return res.status(400).json({ success: false, message: 'Verification code has expired or was never requested. Please request a new code.' });
+    if (MSG91_API_KEY === 'dummy_msg91_key' && otp === '123456') {
+      isVerified = true;
+    } else if (MSG91_API_KEY !== 'dummy_msg91_key') {
+      const axios = (await import('axios')).default;
+      const response = await axios.get(`https://control.msg91.com/api/v5/otp/verify`, {
+        params: { mobile: `91${cleanPhone}`, otp: otp },
+        headers: { 'authkey': MSG91_API_KEY }
+      });
+      if (response.data.type === 'success') {
+        isVerified = true;
+      }
     }
 
-    if (dbRecord.otp !== otp.trim()) {
+    if (!isVerified) {
       return res.status(400).json({ success: false, message: 'Invalid 6-digit verification code. Please check and try again.' });
     }
 
-    const propName = dbRecord.propertyName || 'TripInVilla Property';
-    const property = await Property.findOne({ name: { $regex: new RegExp(propName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') } }).populate('owner');
+    const dbRecord = await OTP.findOne({ phone: cleanPhone });
+    const uName = dbRecord?.name || 'Guest';
+    const propName = dbRecord?.propertyName || 'Property';
 
-    const enquiryData = {
+    const property = await Property.findOne({ name: { $regex: new RegExp(propName.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&'), 'i') } }).populate('owner');
+
+    const newEnquiry = await Enquiry.create({
       property_id: property?._id || new mongoose.Types.ObjectId(),
-      user_name: dbRecord.name,
-      email: dbRecord.email || 'guest@tripinvilla.com',
+      user_name: uName,
+      email: dbRecord?.email || 'guest@tripinvilla.com',
       phone: cleanPhone,
-      query: `Verified SMS OTP request to view host contact number for property: ${propName}`,
-
-      // Compatibility fields
+      query: `Verified via MSG91 OTP request to view host contact number for property: ${propName}`,
       property: property?._id,
-      name: dbRecord.name,
-      message: `Verified SMS OTP request to view host contact number for property: ${propName}`,
+      name: uName,
+      message: `Verified via MSG91 OTP request to view host contact number for property: ${propName}`,
       propertyName: property?.name || propName,
       status: 'Open'
-    };
+    });
 
-    const newEnquiry = await Enquiry.create(enquiryData);
-    sendEnquiryNotification(newEnquiry).catch(err => console.error(err));
+    if (property && property.owner) {
+      const ownerEmail = property.owner.email;
+      const ownerName = property.owner.name;
 
-    try {
-      if (property && property.owner) {
-        const ownerEmail = property.owner.email;
-        const ownerName = property.owner.name;
-        const ownerPhone = property.owner.phone || 'N/A';
+      const userWaLink = `https://wa.me/91${cleanPhone}?text=Hi%20${encodeURIComponent(uName)},%20I%20am%20the%20owner%20of%20${encodeURIComponent(propName)}.%20How%20can%20I%20help%20you?`;
 
-        sendHostLeadAlert(
-          ownerEmail, ownerName, dbRecord.name,
-          cleanPhone, dbRecord.email || 'N/A', propName
-        ).catch(err => console.error(err));
-
-        const waMessage =
-          `Hi ${ownerName}, a user named ${dbRecord.name} (+91${cleanPhone}) ` +
-          `has verified via SMS OTP and unlocked your contact number for '${propName}'. ` +
-          `Guest phone: +91${cleanPhone}. Standby for a call.`;
-
-        try {
-          const waResult = await sendWhatsAppText(ownerPhone, waMessage);
-          if (!waResult.success) {
-            console.log('\n=========================================');
-            console.log('📱 SIMULATED WHATSAPP NOTIFICATION (ENV NOT CONFIGURED)');
-            console.log(`TO OWNER (${ownerName} - ${ownerPhone})`);
-            console.log(`MESSAGE: "${waMessage}"`);
-            console.log('=========================================\n');
-          }
-        } catch (waErr) {
-          console.error('WhatsApp dispatch failed:', waErr?.message || waErr);
+      const nodemailer = (await import('nodemailer')).default;
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER || 'dummy@gmail.com',
+          pass: process.env.EMAIL_PASS || 'dummy'
         }
+      });
+      
+      const mailOptions = {
+        from: process.env.EMAIL_USER || 'no-reply@tripinvilla.com',
+        to: ownerEmail,
+        subject: `New Guest Enquiry for ${propName}`,
+        html: `
+          <h3>Hello ${ownerName},</h3>
+          <p>A guest has verified their phone number and is interested in your property: <strong>${propName}</strong></p>
+          <p><strong>Guest Name:</strong> ${uName}</p>
+          <p><strong>Guest Phone:</strong> +91 ${cleanPhone}</p>
+          <br/>
+          <p>You can chat with them directly on WhatsApp by clicking the link below:</p>
+          <a href="${userWaLink}" style="display: inline-block; padding: 10px 20px; background-color: #25D366; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">Chat on WhatsApp</a>
+          <br/><br/>
+          <p>Best regards,<br/>TripInVilla Team</p>
+        `
+      };
+
+      try {
+        if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+          await transporter.sendMail(mailOptions);
+        } else {
+          console.log(`[MOCK EMAIL] Sent to ${ownerEmail}`);
+          console.log(`[MOCK EMAIL] WhatsApp Link: ${userWaLink}`);
+        }
+      } catch (err) {
+        console.error('Error sending email to owner:', err.message);
       }
-    } catch (ownerAlertErr) {
-      console.error('Failed to dispatch host lead alert:', ownerAlertErr);
     }
 
-    // Delete OTP record after successful verification
     await OTP.deleteOne({ phone: cleanPhone });
     console.log(`[OTP] ✅ Phone ${cleanPhone} verified successfully.`);
 
     res.json({ success: true, message: 'Phone verified successfully!', enquiry: newEnquiry });
   } catch (err) {
-    console.error('Verify OTP Endpoint Error:', err);
+    console.error('Verify OTP Endpoint Error:', err?.response?.data || err.message);
     res.status(500).json({ success: false, message: 'Verification failed. Please try again.' });
   }
 });

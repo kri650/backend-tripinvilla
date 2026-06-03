@@ -178,7 +178,7 @@ router.get('/recommended', async (req, res) => {
     const properties = await Property.find({ owner: { $in: eligibleUserIds }, status: 'Active' })
       .populate('owner', 'name phone email role isPremium subscription')
       .limit(20)
-      .sort({ createdAt: -1 });
+      .sort({ priority: -1, createdAt: -1 });
 
     const formatted = properties.map((p, index) => {
       const pObj = p.toObject();
@@ -204,7 +204,7 @@ router.get('/recommended', async (req, res) => {
 // GET top 10 by bookings
 router.get('/top', async (req, res) => {
   try {
-    const properties = await Property.find({ status: 'Active' }).sort({ totalBookings: -1 }).limit(10);
+    const properties = await Property.find({ status: 'Active' }).sort({ priority: -1, totalBookings: -1 }).limit(10);
     res.json(properties);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -624,7 +624,7 @@ Only include fields that are clearly mentioned. If no city but a place is mentio
       ];
     }
 
-    const properties = await Property.find(dbFilter).sort({ hasActiveOffer: -1, createdAt: -1 }).limit(20).populate('experiences');
+    const properties = await Property.find(dbFilter).sort({ priority: -1, hasActiveOffer: -1, createdAt: -1 }).limit(20).populate('experiences');
     const formatted = properties.map((p, i) => ({
       _id: p._id,
       propertyNo: p.propertyNo || `PR-${1000 + i}`,
