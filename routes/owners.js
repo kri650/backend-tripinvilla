@@ -20,7 +20,7 @@ const makeOwnerNo = (userId) => {
 // GET /api/owners
 router.get('/', async (req, res) => {
   try {
-    const { search, type, date } = req.query;
+    const { search, type, dateFrom, dateTo, date } = req.query;
 
     let ownersQuery = { role: 'owner' };
     
@@ -41,16 +41,31 @@ router.get('/', async (req, res) => {
     // If type or date is provided, filter the valid owners based on their properties
     let validOwnerIds = new Set(ownerIds.map(id => id.toString()));
 
-    if (type || date) {
+    if (type || dateFrom || dateTo || date) {
       let filteredProps = props;
       if (type) {
         filteredProps = filteredProps.filter(p => p.type === type);
       }
-      if (date) {
-        const startDate = new Date(date);
-        startDate.setHours(0, 0, 0, 0);
-        const endDate = new Date(date);
-        endDate.setHours(23, 59, 59, 999);
+      
+      const startParam = dateFrom || date;
+      const endParam = dateTo || date;
+      
+      if (startParam || endParam) {
+        let startDate, endDate;
+        if (startParam) {
+          startDate = new Date(startParam);
+          startDate.setHours(0, 0, 0, 0);
+        } else {
+          startDate = new Date(0); // Very early date
+        }
+        
+        if (endParam) {
+          endDate = new Date(endParam);
+          endDate.setHours(23, 59, 59, 999);
+        } else {
+          endDate = new Date(); // Today
+        }
+        
         filteredProps = filteredProps.filter(p => p.createdAt >= startDate && p.createdAt <= endDate);
       }
       const ownersWithMatchingProps = filteredProps.map(p => p.owner.toString());
