@@ -1,12 +1,26 @@
 import express from 'express';
 import RoomTypeMaster from '../../models/RoomTypeMaster.js';
+import Property from '../../models/Property.js';
 
 const router = express.Router();
 
 // Get all room types
 router.get('/', async (req, res) => {
   try {
-    const types = await RoomTypeMaster.find().sort({ createdAt: -1 });
+    const typesDb = await RoomTypeMaster.find().sort({ createdAt: -1 });
+    let types = [];
+    for (const type of typesDb) {
+      const escapedName = (type.name || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const count = await Property.countDocuments({ roomType: { $regex: new RegExp(`^${escapedName}$`, 'i') } });
+      types.push({
+        _id: type._id,
+        name: type.name,
+        status: type.status,
+        propertiesCount: count,
+        createdAt: type.createdAt,
+        updatedAt: type.updatedAt
+      });
+    }
     res.json(types);
   } catch (error) {
     res.status(500).json({ error: error.message });

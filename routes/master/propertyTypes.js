@@ -1,12 +1,26 @@
 import express from 'express';
 import PropertyTypeMaster from '../../models/PropertyTypeMaster.js';
+import Property from '../../models/Property.js';
 
 const router = express.Router();
 
 // GET all active property types
 router.get('/', async (req, res) => {
   try {
-    const types = await PropertyTypeMaster.find().sort({ name: 1 });
+    const typesDb = await PropertyTypeMaster.find().sort({ name: 1 });
+    let types = [];
+    for (const type of typesDb) {
+      const escapedName = (type.name || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const count = await Property.countDocuments({ type: { $regex: new RegExp(`^${escapedName}$`, 'i') } });
+      types.push({
+        _id: type._id,
+        name: type.name,
+        status: type.status,
+        propertiesCount: count,
+        createdAt: type.createdAt,
+        updatedAt: type.updatedAt
+      });
+    }
     res.json(types);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch property types' });

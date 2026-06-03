@@ -14,15 +14,7 @@ router.get('/active', async (req, res) => {
     let results = [];
 
     for (const exp of experiencesDb) {
-      const query = {
-        $or: [
-          { experiences: exp._id },
-          { experiences: { $regex: `^${exp.experienceName}$`, $options: 'i' } }
-        ]
-      };
-      if (mongoose.isValidObjectId(exp.experienceName)) {
-        query.$or.push({ experiences: exp.experienceName });
-      }
+      const query = { experiences: exp._id };
       const count = await Property.countDocuments(query);
       results.push({
         _id: exp._id,
@@ -49,15 +41,7 @@ router.get('/', async (req, res) => {
     let results = [];
 
     for (const exp of experiencesDb) {
-      const query = {
-        $or: [
-          { experiences: exp._id },
-          { experiences: { $regex: `^${exp.experienceName}$`, $options: 'i' } }
-        ]
-      };
-      if (mongoose.isValidObjectId(exp.experienceName)) {
-        query.$or.push({ experiences: exp.experienceName });
-      }
+      const query = { experiences: exp._id };
       const count = await Property.countDocuments(query);
       results.push({
         _id: exp._id,

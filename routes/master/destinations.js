@@ -17,7 +17,8 @@ router.get('/', async (req, res) => {
     let results = [];
 
     for (const dest of destinationsDb) {
-      const count = await Property.countDocuments({ location: { $regex: dest.destinationName, $options: 'i' } });
+      const escapedName = (dest.destinationName || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const count = await Property.countDocuments({ location: { $regex: escapedName, $options: 'i' } });
       results.push({
         _id: dest._id,
         destinationName: dest.destinationName,

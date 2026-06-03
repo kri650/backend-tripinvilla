@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 const roomTypeMasterSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
   status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
+  propertiesCount: { type: Number, default: 0 }
 }, { timestamps: true });
 
 export default mongoose.model('RoomTypeMaster', roomTypeMasterSchema);

@@ -136,6 +136,7 @@ router.get('/top-properties', async (req, res) => {
     }
 
     const formatted = allProperties.slice(0, 10).map((p, index) => ({
+      ...p._doc, // Send full property details for PropertyViewModal
       propertyNo: `PR-${1000 + index}`,
       id: p._id,
       image: p.images && p.images[0] ? p.images[0] : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60',
