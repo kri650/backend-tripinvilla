@@ -110,8 +110,8 @@ const propertySchema = new mongoose.Schema({
   // --- Search Engine specific ---
   foodPreference: { type: String, enum: ["veg", "non-veg", "both", "none"], default: "none" },
   bookedDates: [{ checkIn: Date, checkOut: Date }],
-  isVerified: { type: Boolean, default: false },
-  isFeatured: { type: Boolean, default: false },
+  isVerified: { type: Boolean, default: true },
+  isFeatured: { type: Boolean, default: true },
 
 }, { timestamps: true });
 
