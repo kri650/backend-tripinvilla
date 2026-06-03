@@ -6,6 +6,7 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true },
   role: { type: String, enum: ['super_admin', 'admin', 'moderator', 'owner', 'user'], default: 'user' },
+  wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Property' }],
   avatar: { type: String },
   phone: { type: String },
   company: { type: String },

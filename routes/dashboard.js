@@ -160,14 +160,22 @@ router.get('/top-properties', async (req, res) => {
 // GET /api/dashboard/recent-enquiries
 router.get('/recent-enquiries', async (req, res) => {
   try {
-    const { month, year } = req.query;
+    const { month, year, dateFrom, dateTo } = req.query;
     let query = {};
-    if (month && year) {
+    if (dateFrom || dateTo) {
+      query.createdAt = {};
+      if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
+      if (dateTo) {
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = toDate;
+      }
+    } else if (month && year) {
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 1);
       query.createdAt = { $gte: startDate, $lt: endDate };
     }
-    const enquiriesDb = await Enquiry.find(query).sort({ createdAt: -1 }).limit(10).populate('property_id', 'name');
+    const enquiriesDb = await Enquiry.find(query).sort({ createdAt: -1 }).limit(50).populate('property_id', 'name');
     const formatted = enquiriesDb.map((e, index) => {
       const dateObj = new Date(e.createdAt || Date.now());
       const datesAndTime = dateObj.toLocaleString('en-IN', {
@@ -175,7 +183,7 @@ router.get('/recent-enquiries', async (req, res) => {
         hour: '2-digit', minute: '2-digit'
       });
       return {
-        enquiryNo: `ENQ-${4000 + index}`,
+        enquiryNo: e.enquiryNo || `ENQ-${4000 + index}`,
         id: e._id,
         datesAndTime,
         userName: e.user_name || e.name || 'Anonymous',
@@ -190,5 +198,6 @@ router.get('/recent-enquiries', async (req, res) => {
     res.json([]);
   }
 });
+
 
 export default router;
