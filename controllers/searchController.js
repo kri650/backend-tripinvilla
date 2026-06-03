@@ -41,70 +41,100 @@ function buildFilter(params) {
 
   const filter = { status: "Active" };
 
-  if (city) filter.city = new RegExp(city.trim(), "i");
-  
-  if (type && type !== "any" && type !== "all") {
-    // Tripinvilla type enum capitalization (e.g., 'Villa', 'Homestay')
-    filter.type = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+  // ── Location / City filter ──────────────────────────────────────────
+  // Search across city, state, AND location field so "India", "Maharashtra", etc. all work
+  if (city && city.trim()) {
+    const cityRegex = new RegExp(city.trim(), "i");
+    filter.$and = filter.$and || [];
+    filter.$and.push({
+      $or: [
+        { city: cityRegex },
+        { state: cityRegex },
+        { location: cityRegex },
+      ]
+    });
   }
-  
-  if (roomType && roomType !== "any") filter.roomType = roomType;
-  if (foodPreference && foodPreference !== "any") filter.foodPreference = foodPreference;
-  if (guests) filter.capacity = { $gte: Number(guests) };
+
+  // ── Property Type filter (case-insensitive) ─────────────────────────
+  // DB has mixed case: 'Villa', 'villa', 'Hotel', 'hotel' — use regex
+  if (type && type !== "any" && type !== "all" && type !== "") {
+    filter.type = new RegExp(`^${type.trim()}$`, "i");
+  }
+
+  // ── Room Type ───────────────────────────────────────────────────────
+  if (roomType && roomType !== "any" && roomType !== "") {
+    filter.roomType = new RegExp(roomType.trim(), "i");
+  }
+
+  // ── Food Preference ─────────────────────────────────────────────────
+  // Only apply if explicitly set and not 'none'
+  if (foodPreference && foodPreference !== "any" && foodPreference !== "none") {
+    filter.foodPreference = { $in: [foodPreference, "both"] };
+  }
+
+  // ── Guests / Capacity ───────────────────────────────────────────────
+  if (guests && !isNaN(Number(guests)) && Number(guests) > 0) {
+    filter.capacity = { $gte: Number(guests) };
+  }
+
+  // ── Verified / Featured ─────────────────────────────────────────────
   if (verifiedOnly === "true" || verifiedOnly === true) filter.isVerified = true;
   if (featuredOnly === "true" || featuredOnly === true) filter.isFeatured = true;
 
-  // Price range (mapped to Tripinvilla 'price')
+  // ── Price range ─────────────────────────────────────────────────────
+  // DB uses 'price' field — also check bestRoomRate as fallback
   if (minPrice || maxPrice) {
-    filter.price = {};
-    if (minPrice) filter.price.$gte = Number(minPrice);
-    if (maxPrice) filter.price.$lte = Number(maxPrice);
+    const min = minPrice ? Number(minPrice) : null;
+    const max = maxPrice ? Number(maxPrice) : null;
+    const priceCondition = {};
+    if (min) priceCondition.$gte = min;
+    if (max) priceCondition.$lte = max;
+    filter.$and = filter.$and || [];
+    filter.$and.push({
+      $or: [
+        { price: priceCondition },
+        { bestRoomRate: priceCondition },
+      ]
+    });
   }
 
-  // Availability
+  // ── Date availability ───────────────────────────────────────────────
   Object.assign(filter, buildAvailabilityFilter(checkIn, checkOut));
 
-  // Keyword regex search (partial matches / multi-word tolerance)
+  // ── Keyword search ──────────────────────────────────────────────────
+  // Searches name, city, state, location, description, type
   if (keyword && keyword.trim()) {
     const kw = keyword.trim();
-    const terms = kw.split(/\s+/).filter(t => t.length > 1);
-    
+    // Split into words, ignore common stop words
+    const stopWords = new Set(['in', 'at', 'on', 'the', 'for', 'a', 'an', 'and', 'or', 'near', 'by']);
+    const terms = kw.split(/\s+/).filter(t => t.length > 1 && !stopWords.has(t.toLowerCase()));
+
     if (terms.length > 0) {
       filter.$and = filter.$and || [];
+      // Each term must match at least one of the search fields
       terms.forEach(term => {
-        // Skip common stop words that might overly restrict results
-        if (['in', 'at', 'on', 'the', 'for', 'a', 'an', 'and'].includes(term.toLowerCase())) return;
-        
-        const singularTerm = term.endsWith('s') && term.length > 3 ? term.slice(0, -1) : term;
-        
+        const termRegex = new RegExp(term, "i");
         filter.$and.push({
           $or: [
-            { name: new RegExp(term, "i") },
-            { city: new RegExp(term, "i") },
-            { state: new RegExp(term, "i") },
-            { location: new RegExp(term, "i") },
-            { type: new RegExp(singularTerm, "i") },
-            { category: new RegExp(singularTerm, "i") },
-            { description: new RegExp(singularTerm, "i") }
+            { name: termRegex },
+            { city: termRegex },
+            { state: termRegex },
+            { location: termRegex },
+            { type: termRegex },
+            { category: termRegex },
+            { description: termRegex },
           ]
         });
       });
-      // If all words were stop words, fallback to full string match
-      if (filter.$and.length === 0) {
-        delete filter.$and;
-        filter.$or = [
-          { name: new RegExp(kw, "i") },
-          { city: new RegExp(kw, "i") },
-          { location: new RegExp(kw, "i") }
-        ];
-      }
     } else {
+      // All words were stop words — do broad match on full string
+      const kwRegex = new RegExp(kw, "i");
       filter.$or = [
-        { name: new RegExp(kw, "i") },
-        { city: new RegExp(kw, "i") },
-        { state: new RegExp(kw, "i") },
-        { location: new RegExp(kw, "i") },
-        { description: new RegExp(kw, "i") }
+        { name: kwRegex },
+        { city: kwRegex },
+        { state: kwRegex },
+        { location: kwRegex },
+        { description: kwRegex },
       ];
     }
   }
