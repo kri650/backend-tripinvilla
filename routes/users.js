@@ -61,7 +61,7 @@ router.post('/wishlist/:propertyId', protect, async (req, res) => {
     const user = await User.findById(req.user.id);
     const propertyId = req.params.propertyId;
 
-    const index = user.wishlist.indexOf(propertyId);
+    const index = user.wishlist.findIndex(id => id && id.toString() === propertyId.toString());
     if (index > -1) {
       user.wishlist.splice(index, 1); // Remove
       await user.save();
@@ -72,7 +72,7 @@ router.post('/wishlist/:propertyId', protect, async (req, res) => {
       res.json({ message: 'Added to wishlist', wishlist: user.wishlist });
     }
   } catch (err) {
-    res.json({ message: 'Wishlist toggled (mock mode)', wishlist: [] });
+    res.status(500).json({ message: err.message });
   }
 });
 
