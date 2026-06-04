@@ -236,7 +236,7 @@ router.post('/upload', protect, ownerOnly, checkPhotoLimit, upload.array('images
 // GET /api/properties/owner -> Fetch owner's property list — MUST be before /:id
 router.get('/owner', protect, ownerOnly, async (req, res) => {
   try {
-    const properties = await Property.find({ owner: req.user._id }).sort({ createdAt: -1 });
+    const properties = await Property.find({ owner: req.user._id }).populate('experiences').sort({ createdAt: -1 });
     const formatted = properties.map(p => {
       const obj = p.toObject();
       return {
