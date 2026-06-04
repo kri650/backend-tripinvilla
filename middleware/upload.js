@@ -28,11 +28,11 @@ const diskStorage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/svg+xml'];
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Only images (jpg, jpeg, png) are allowed'), false);
+    cb(new Error('Only images (jpg, jpeg, png, svg) are allowed'), false);
   }
 };
 
