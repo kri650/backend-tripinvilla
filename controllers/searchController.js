@@ -41,13 +41,14 @@ function buildFilter(params) {
 
   const filter = { status: "Active" };
 
-  // ── Location / City filter ──────────────────────────────────────────
-  // Search across city, state, AND location field so "India", "Maharashtra", etc. all work
+  // ── Location / City / Property Name filter ──────────────────────────────────────────
+  // Search across name, city, state, AND location field so property names and locations all work
   if (city && city.trim()) {
     const cityRegex = new RegExp(city.trim(), "i");
     filter.$and = filter.$and || [];
     filter.$and.push({
       $or: [
+        { name: cityRegex },
         { city: cityRegex },
         { state: cityRegex },
         { location: cityRegex },
@@ -148,7 +149,7 @@ function buildFilter(params) {
 // ─────────────────────────────────────────────────────────────────
 export const search = async (req, res) => {
   try {
-    const { page = 1, limit = 12, sortBy = "priority" } = req.query;
+    const { page = 1, limit = 100, sortBy = "priority" } = req.query;
     const filter = buildFilter(req.query);
 
     const sortMap = {
@@ -292,7 +293,7 @@ If relative dates like "this weekend" or "next Friday" are mentioned, calculate 
     const filter = buildFilter(filterParams);
     const propertiesDb = await Property.find(filter)
       .sort({ priority: -1, createdAt: -1 })
-      .limit(12)
+      .limit(100)
       .populate("owner", "name phone email")
       .lean();
 
