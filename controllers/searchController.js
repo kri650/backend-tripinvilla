@@ -154,8 +154,8 @@ export const search = async (req, res) => {
 
     const sortMap = {
       priority: { priority: -1, createdAt: -1 },
-      "price-asc": { price: 1, priority: -1 },
-      "price-desc": { price: -1, priority: -1 },
+      "price-asc": { priority: -1, price: 1 },
+      "price-desc": { priority: -1, price: -1 },
       newest: { createdAt: -1 },
     };
 

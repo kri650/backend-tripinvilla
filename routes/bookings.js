@@ -152,14 +152,25 @@ router.post('/verify-premium', protect, requireRazorpay, async (req, res) => {
       return res.status(400).json({ message: 'Transaction not legitimate!' });
     }
 
-    const user = await User.findByIdAndUpdate(req.user.id, { isPremium: true }, { new: true });
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      {
+        isPremium: true,
+        'subscription.isActive': true,
+        'subscription.plan': 'premium',
+        'subscription.expiresAt': expiresAt
+      },
+      { new: true }
+    );
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Update all properties owned by this user to have priority 1
+    // Update all properties owned by this user to have top priority
     const Property = (await import('../models/Property.js')).default;
-    await Property.updateMany({ owner: req.user.id }, { priority: 1 });
+    await Property.updateMany({ owner: req.user.id }, { priority: 10 });
 
     res.json({ message: 'Premium membership activated successfully!', user });
   } catch (err) {

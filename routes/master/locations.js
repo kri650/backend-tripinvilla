@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
     } else if (req.query.city_id) {
       // Fallback: look up city name by ID, then search by name
       try {
-        const City = (await import('../../models/City.js')).default;
+        const City = (await import('../../models/CityMaster.js')).default;
         const city = await City.findById(req.query.city_id).lean();
         if (city && city.cityName) {
           filter.parentLocation = { $regex: city.cityName, $options: 'i' };
@@ -59,7 +59,7 @@ router.get('/active', async (req, res) => {
     } else if (req.query.city_id) {
       // Fallback: look up city name by ID, then search by name
       try {
-        const City = (await import('../../models/City.js')).default;
+        const City = (await import('../../models/CityMaster.js')).default;
         const city = await City.findById(req.query.city_id).lean();
         if (city && city.cityName) {
           filter.parentLocation = { $regex: city.cityName, $options: 'i' };

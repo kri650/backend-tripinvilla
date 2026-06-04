@@ -6,6 +6,17 @@ import { protect, ownerOnly } from '../middleware/auth.js';
 
 const router = express.Router();
 
+const formatOfferDateTime = (offer) => {
+  const offerDate = offer.offer_date || offer.dateFrom;
+  if (!offerDate) return offer.offer_time || 'N/A';
+  const dateFormatted = new Date(offerDate).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
+  return `${dateFormatted}${offer.offer_time ? `\n${offer.offer_time}` : ''}`;
+};
+
 // GET all active offers for frontend
 // GET /api/offers/frontend
 router.get('/frontend', async (req, res) => {
@@ -53,6 +64,7 @@ router.get('/frontend', async (req, res) => {
         foods: o.food_type,
         offerPercent: o.offer_percent,
         status: o.status,
+        datesAndTime: formatOfferDateTime(o),
         _score: score
       };
     });
@@ -98,7 +110,8 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
         room: o.room_type,
         foods: o.food_type,
         offerPercent: o.offer_percent,
-        status: o.status
+        status: o.status,
+        datesAndTime: formatOfferDateTime(o)
       };
     });
 
@@ -135,7 +148,8 @@ router.get('/', async (req, res) => {
         room: o.room_type,
         foods: o.food_type,
         offerPercent: o.offer_percent,
-        status: o.status
+        status: o.status,
+        datesAndTime: formatOfferDateTime(o)
       };
     });
 
@@ -149,7 +163,7 @@ router.get('/', async (req, res) => {
 // POST /api/offers
 router.post('/', protect, ownerOnly, async (req, res) => {
   try {
-    const { property_id, food_type, offer_date, offer_time, offer_percent, description } = req.body;
+    const { property_id, request_id, room_type, food_type, offer_date, offer_time, offer_percent, description } = req.body;
 
         let property = await Property.findById(property_id);
     if (!property) {
@@ -169,12 +183,15 @@ router.post('/', protect, ownerOnly, async (req, res) => {
     }
     if (!property) return res.status(404).json({ message: 'Property not found' });
 
-    const approvedRequest = await PropertyRequest.findOne({ 
-      property: property_id, 
-      admin_status: 'approved' 
-    });
+    const approvedRequest = request_id
+      ? await PropertyRequest.findById(request_id)
+      : await PropertyRequest.findOne({
+          $or: [{ property: property_id }, { property_id }],
+          ...(room_type ? { room_type } : {}),
+          admin_status: 'approved'
+        });
 
-    const roomTypeVal = approvedRequest?.room_type || (property.rooms && property.rooms[0]?.roomType) || 'Deluxe Room';
+    const roomTypeVal = room_type || approvedRequest?.room_type || (property.rooms && property.rooms[0]?.roomType) || 'Deluxe Room';
     const amenitiesVal = approvedRequest?.amenities_types || property.amenities || [];
     const priceVal = approvedRequest?.price_per_room || property.price || 0;
     const requestIdVal = approvedRequest?._id || null;
@@ -250,12 +267,14 @@ router.get('/:id', async (req, res) => {
 // PUT /api/offers/:id
 router.put('/:id', protect, ownerOnly, async (req, res) => {
   try {
-    const { property_id, food_type, offer_date, offer_time, offer_percent, description, status } = req.body;
+    const { property_id, request_id, room_type, food_type, offer_date, offer_time, offer_percent, description, status } = req.body;
     
     const offerDateObj = new Date(offer_date);
     
     const offer = await Offer.findByIdAndUpdate(req.params.id, {
       property_id,
+      request_id,
+      room_type,
       food_type,
       offer_date: offerDateObj,
       offer_time,

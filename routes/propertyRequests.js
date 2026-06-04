@@ -6,6 +6,72 @@ import { syncRoomMasters } from '../utils/masterSync.js';
 
 const router = express.Router();
 
+const normalizeRuleSections = (rules) => {
+  if (!Array.isArray(rules)) return [];
+
+  return rules
+    .map(rule => {
+      const rawPoints = Array.isArray(rule.points)
+        ? rule.points
+        : typeof rule.text === 'string'
+          ? rule.text.split('\n')
+          : typeof rule.points === 'string'
+            ? rule.points.split('\n')
+            : [];
+
+      const points = rawPoints
+        .map(point => String(point || '').replace(/^[•\-\*]\s*/, '').trim())
+        .filter(Boolean);
+
+      return {
+        title: String(rule.title || '').trim(),
+        points
+      };
+    })
+    .filter(rule => rule.title || rule.points.length > 0);
+};
+
+const requestToPropertyRoom = (request) => ({
+  roomType: request.room_type || 'Deluxe Room',
+  roomName: request.room_type || 'Deluxe Room',
+  imageUrl: request.room_image_url || (Array.isArray(request.room_images) ? request.room_images[0] : ''),
+  pricePerNight: Number(request.price_per_room) || 0,
+  maxGuests: 2,
+  bedType: request.bed_type || '',
+  count: 1,
+  amenities: Array.isArray(request.amenities_types) ? request.amenities_types : [],
+  checkIn: request.checkin_time || '',
+  checkOut: request.checkout_time || '',
+  offer: Array.isArray(request.offers) ? request.offers[0] || '' : '',
+  rules: normalizeRuleSections(request.rules)
+    .flatMap(rule => rule.points)
+    .join('\n')
+});
+
+const syncAcceptedRoomToProperty = async (request) => {
+  const propId = request.property || request.property_id;
+  if (!propId) return;
+
+  const property = await Property.findById(propId);
+  if (!property) return;
+
+  const room = requestToPropertyRoom(request);
+  const rooms = Array.isArray(property.rooms) ? property.rooms.map(r => r.toObject ? r.toObject() : r) : [];
+  const roomIndex = rooms.findIndex(existing => {
+    if (request._id && existing.requestId && String(existing.requestId) === String(request._id)) return true;
+    const sameType = String(existing.roomType || '').toLowerCase() === String(room.roomType || '').toLowerCase();
+    const samePrice = Number(existing.pricePerNight || 0) === Number(room.pricePerNight || 0);
+    return sameType && samePrice;
+  });
+
+  if (roomIndex >= 0) rooms[roomIndex] = { ...rooms[roomIndex], ...room };
+  else rooms.push(room);
+
+  property.rooms = rooms;
+  property.status = 'Active';
+  await property.save();
+};
+
 // GET all property requests (Admin View)
 // GET /api/property-requests
 router.get('/', protect, adminOnly, async (req, res) => {
@@ -39,12 +105,13 @@ router.get('/', protect, adminOnly, async (req, res) => {
       amenities_types: r.amenities_types || [],
       original_price: r.original_price,
       price_per_room: r.price_per_room,
-      tax_amount: r.tax_amount,
       checkin_time: r.checkin_time,
       checkout_time: r.checkout_time,
       offers: r.offers || [],
-      rules: r.rules,
+      rules: normalizeRuleSections(r.rules),
       room_image_url: r.room_image_url,
+      room_images: r.room_images || [],
+      tax_amount: r.tax_amount,
       property_id: r.property?._id || r.property_id
     }));
 
@@ -73,8 +140,7 @@ router.put('/:id/accept', protect, adminOnly, async (req, res) => {
     
     // Update the property status to Active
     if (request.property || request.property_id) {
-      const propId = request.property || request.property_id;
-      await Property.findByIdAndUpdate(propId, { status: 'Active' });
+      await syncAcceptedRoomToProperty(request);
     }
     
     res.json(request);
@@ -125,7 +191,7 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
       return {
         ...obj,
         id: r._id,
-        property_id: r.property?._id,
+        property_id: r.property?._id || r.property_id,
         propertyName: r.property?.name || r.propertyName,
         category: r.property?.type || r.category,
         room_type: r.room_type,
@@ -137,7 +203,9 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
         checkin_time: r.checkin_time,
         checkout_time: r.checkout_time,
         offers: r.offers,
-        rules: r.rules,
+        room_images: r.room_images || [],
+        tax_amount: r.tax_amount,
+        rules: normalizeRuleSections(r.rules),
         admin_status: r.admin_status || 'pending'
       };
     });
@@ -194,6 +262,7 @@ router.post('/admin-direct', protect, adminOnly, upload.array('images', 10), asy
     });
 
     await syncRoomMasters({ room_type, amenities_types, experiences: req.body.experiences });
+    await syncAcceptedRoomToProperty(newRoom);
 
     res.status(201).json(newRoom);
   } catch (err) {
@@ -237,6 +306,7 @@ router.put('/admin-direct/:id', protect, adminOnly, upload.array('images', 10), 
     if (!updated) return res.status(404).json({ message: 'Room not found' });
     
     await syncRoomMasters({ room_type, amenities_types, experiences: req.body.experiences });
+    await syncAcceptedRoomToProperty(updated);
     
     res.json(updated);
   } catch (err) {
@@ -268,7 +338,9 @@ router.get('/property/:propertyId', async (req, res) => {
       price: r.price_per_room || 1400,
       checkIn: r.checkin_time,
       checkOut: r.checkout_time,
-      rules: r.rules
+      tax_amount: r.tax_amount,
+      roomName: r.room_type || 'Deluxe Room',
+      rules: normalizeRuleSections(r.rules)
     }));
     res.json(formatted);
   } catch (err) {
@@ -280,7 +352,7 @@ router.get('/property/:propertyId', async (req, res) => {
 // POST /api/property-requests -> Submit request
 router.post('/', protect, ownerOnly, async (req, res) => {
   try {
-    const { property_id, room_type, room_image_url, bed_type, amenities_types, original_price, price_per_room, checkin_time, checkout_time, offers, rules } = req.body;
+    const { property_id, room_type, room_image_url, bed_type, amenities_types, original_price, price_per_room, tax_amount, checkin_time, checkout_time, offers, rules } = req.body;
     
     const property = await Property.findOne({ _id: property_id, owner: req.user._id });
     if (!property) return res.status(404).json({ message: 'Property not found or access denied' });
@@ -305,10 +377,11 @@ router.post('/', protect, ownerOnly, async (req, res) => {
       amenities_types: Array.isArray(amenities_types) ? amenities_types : [],
       original_price: original_price ? Number(original_price) : undefined,
       price_per_room: Number(price_per_room),
+      tax_amount: tax_amount ? Number(tax_amount) : undefined,
       checkin_time,
       checkout_time,
       offers: Array.isArray(offers) ? offers : [],
-      rules,
+      rules: normalizeRuleSections(rules),
       admin_status: 'pending',
       status: 'pending' // compatibility
     });
@@ -347,7 +420,7 @@ router.put('/:id', protect, ownerOnly, async (req, res) => {
         checkin_time,
         checkout_time,
         offers: Array.isArray(offers) ? offers : [],
-        rules,
+        rules: normalizeRuleSections(rules),
         admin_status: 'pending', // reset to pending on edit
         status: 'pending'
       },
@@ -381,9 +454,13 @@ router.patch('/:id', protect, adminOnly, async (req, res) => {
     await request.save();
     
     // Update the property status
-    if (request.property) {
+    if (request.property || request.property_id) {
       const propertyStatus = admin_status === 'approved' ? 'Active' : (admin_status === 'rejected' ? 'Inactive Admin' : 'Pending');
-      await Property.findByIdAndUpdate(request.property, { status: propertyStatus });
+      if (admin_status === 'approved') {
+        await syncAcceptedRoomToProperty(request);
+      } else {
+        await Property.findByIdAndUpdate(request.property || request.property_id, { status: propertyStatus });
+      }
     }
     
     res.json(request);

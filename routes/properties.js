@@ -3,9 +3,104 @@ import Property from '../models/Property.js';
 import PropertyRequest from '../models/PropertyRequest.js';
 import PropertyLandmark from '../models/PropertyLandmark.js';
 import { protect, ownerOnly } from '../middleware/auth.js';
-import { syncPropertyMasters } from '../utils/masterSync.js';
+import { syncPropertyMasters, syncRoomMasters } from '../utils/masterSync.js';
 
 const router = express.Router();
+
+const cleanRuleText = (rules) => {
+  if (typeof rules !== 'string') return '';
+  return rules
+    .split('\n')
+    .map(rule => rule.replace(/^[•\-\*]\s*/, '').trim())
+    .filter(Boolean)
+    .join('\n');
+};
+
+const normalizeEmbeddedRoom = (room) => ({
+  roomType: room.roomType || room.room_type || 'Deluxe',
+  roomName: room.roomName || room.room_type || room.roomType || '',
+  imageUrl: room.imageUrl || room.room_image_url || room.img || '',
+  pricePerNight: Number(room.pricePerNight ?? room.price_per_room ?? room.price ?? 0),
+  maxGuests: Number(room.maxGuests ?? room.max_guests ?? room.capacity ?? 2),
+  bedType: room.bedType || room.bed_type || 'Double',
+  count: Number(room.count ?? 1),
+  amenities: Array.isArray(room.amenities)
+    ? room.amenities
+    : Array.isArray(room.amenities_types)
+      ? room.amenities_types
+      : [],
+  checkIn: room.checkIn || room.checkin_time || '',
+  checkOut: room.checkOut || room.checkout_time || '',
+  offer: room.offer || (Array.isArray(room.offers) ? room.offers[0] || '' : ''),
+  rules: cleanRuleText(room.rules)
+});
+
+const roomToRequestPayload = ({ room, property, reqUser, ownerName, ownerContact, isAdmin }) => {
+  const normalized = normalizeEmbeddedRoom(room);
+  return {
+    property: property._id,
+    property_id: property._id,
+    propertyName: property.name,
+    location: property.location,
+    category: property.type,
+    ownerName: ownerName || reqUser.name || 'Owner',
+    ownerContact: ownerContact || reqUser.phone || reqUser.email || 'N/A',
+    priceByOwner: normalized.pricePerNight,
+    room_type: normalized.roomType,
+    bed_type: normalized.bedType,
+    price_per_room: normalized.pricePerNight,
+    room_image_url: normalized.imageUrl,
+    room_images: normalized.imageUrl ? [normalized.imageUrl] : [],
+    amenities_types: normalized.amenities,
+    offers: normalized.offer ? [normalized.offer] : [],
+    checkin_time: normalized.checkIn || property.checkIn,
+    checkout_time: normalized.checkOut || property.checkOut,
+    rules: normalized.rules
+      ? [{ title: 'Property Rules', points: normalized.rules.split('\n').filter(Boolean) }]
+      : [],
+    admin_status: isAdmin ? 'approved' : 'pending',
+    status: isAdmin ? 'Accepted' : 'pending'
+  };
+};
+
+const syncEmbeddedRoomsToRequests = async ({ property, rooms, reqUser, ownerName, ownerContact, isAdmin }) => {
+  if (!Array.isArray(rooms)) return;
+  const PropertyRequest = (await import('../models/PropertyRequest.js')).default;
+  let reqCount = await PropertyRequest.countDocuments();
+
+  for (const room of rooms) {
+    const payload = roomToRequestPayload({ room, property, reqUser, ownerName, ownerContact, isAdmin });
+    const requestId = room._requestId || room.requestId || room._id;
+    const query = requestId && /^[a-fA-F0-9]{24}$/.test(String(requestId))
+      ? { _id: requestId }
+      : {
+          $or: [{ property: property._id }, { property_id: property._id }],
+          room_type: payload.room_type,
+          price_per_room: payload.price_per_room
+        };
+
+    const existing = await PropertyRequest.findOne(query);
+    if (existing) {
+      Object.assign(existing, payload);
+      if (!isAdmin) {
+        existing.admin_status = 'pending';
+        existing.status = 'pending';
+      }
+      await existing.save();
+    } else {
+      reqCount++;
+      await PropertyRequest.create({
+        requestNo: `REQ-${3000 + reqCount}`,
+        ...payload
+      });
+    }
+
+    await syncRoomMasters({
+      room_type: payload.room_type,
+      amenities_types: payload.amenities_types
+    });
+  }
+};
 
 const mockPropertiesList = [
   { _id: "mock1", propertyNo: "PR-1001", image: "https://images.unsplash.com/photo-1580587722351-9d9b788c0784?w=500&auto=format&fit=crop&q=60", propertyName: "Whispering Palms Villa", location: "Goa, India", category: "Villa", bestRoomRate: 4500, rooms: 4, rating: 4.9, status: "Active", hasActiveOffer: true, createdAt: new Date() },
@@ -134,6 +229,10 @@ router.get('/', async (req, res) => {
         category: p.type || 'Villa',
         bestRoomRate: p.price || 1200,
         rooms: p.bedRooms || 3,
+        roomsList: Array.isArray(pObj.rooms) ? pObj.rooms : [],
+        roomsCount: Array.isArray(pObj.rooms) && pObj.rooms.length > 0
+          ? pObj.rooms.reduce((totalRooms, room) => totalRooms + (Number(room.count) || 1), 0)
+          : (p.bedRooms || 3),
         guests: p.capacity || 2,
         rating: p.rating || 4.5,
         status: p.status || 'Active',
@@ -390,37 +489,15 @@ router.post('/', protect, ownerOnly, async (req, res) => {
     // Sync masters async (fire and forget is okay, but await ensures it happens before respond)
     await syncPropertyMasters(propertyData);
 
-    // If admin is creating the property and rooms are provided, save them as approved PropertyRequests
-    if (isAdmin && Array.isArray(body.rooms) && body.rooms.length > 0) {
-      const PropertyRequest = (await import('../models/PropertyRequest.js')).default;
-      let reqCount = await PropertyRequest.countDocuments();
-      
-      const roomPromises = body.rooms.map(async (room, idx) => {
-        reqCount++;
-        return PropertyRequest.create({
-          requestNo: `REQ-${3000 + reqCount}`,
-          property: property._id,
-          property_id: property._id,
-          propertyName: property.name,
-          location: property.location,
-          category: property.type,
-          ownerName: ownerName || 'Admin',
-          ownerContact: ownerContact || 'admin',
-          room_type: room.roomType || 'Deluxe',
-          bed_type: room.bedType || 'Double',
-          price_per_room: Number(room.pricePerNight) || 0,
-          room_image_url: room.imageUrl || '',
-          room_images: room.imageUrl ? [room.imageUrl] : [],
-          amenities_types: room.amenities || [],
-          offers: room.offer ? [room.offer] : [],
-          checkin_time: room.checkIn || '3:00 PM',
-          checkout_time: room.checkOut || '12:00 PM',
-          rules: [{ title: 'Property Rules', points: room.rules ? room.rules.split('\\n') : [] }],
-          admin_status: 'approved',
-          status: 'Accepted'
-        });
+    if (Array.isArray(body.rooms) && body.rooms.length > 0) {
+      await syncEmbeddedRoomsToRequests({
+        property,
+        rooms: body.rooms,
+        reqUser: req.user,
+        ownerName,
+        ownerContact,
+        isAdmin
       });
-      await Promise.all(roomPromises);
     }
 
     const responseObj = property.toObject();
@@ -463,11 +540,30 @@ router.put('/:id', protect, ownerOnly, async (req, res) => {
       delete body.experiences;
     }
 
+    const incomingRooms = Array.isArray(body.rooms) ? body.rooms : null;
+    if (incomingRooms) body.rooms = incomingRooms.map(normalizeEmbeddedRoom);
+
     Object.assign(property, body);
     await property.save();
     
     // Sync masters async
     await syncPropertyMasters(body);
+
+    if (incomingRooms) {
+      await syncEmbeddedRoomsToRequests({
+        property,
+        rooms: incomingRooms,
+        reqUser: req.user,
+        ownerName: property.ownerName || req.user.name,
+        ownerContact: property.ownerContact || req.user.phone || req.user.email || 'N/A',
+        isAdmin
+      });
+
+      if (!isAdmin) {
+        property.status = 'Pending';
+        await property.save();
+      }
+    }
     
     const responseObj = property.toObject();
     res.json({

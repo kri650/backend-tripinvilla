@@ -1,6 +1,7 @@
 import express from 'express';
 import RoomTypeMaster from '../../models/RoomTypeMaster.js';
 import Property from '../../models/Property.js';
+import PropertyRequest from '../../models/PropertyRequest.js';
 
 const router = express.Router();
 
@@ -11,7 +12,22 @@ router.get('/', async (req, res) => {
     let types = [];
     for (const type of typesDb) {
       const escapedName = (type.name || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const count = await Property.countDocuments({ roomType: { $regex: new RegExp(`^${escapedName}$`, 'i') } });
+      const roomRegex = new RegExp(`^${escapedName}$`, 'i');
+      const [propertyMatches, requestMatches] = await Promise.all([
+        Property.find({
+          $or: [
+            { roomType: { $regex: roomRegex } },
+            { 'rooms.roomType': { $regex: roomRegex } }
+          ]
+        }).select('_id').lean(),
+        PropertyRequest.find({ room_type: { $regex: roomRegex } }).select('property property_id').lean()
+      ]);
+      const propertyIds = new Set(propertyMatches.map(property => String(property._id)));
+      requestMatches.forEach(request => {
+        const propertyId = request.property || request.property_id;
+        if (propertyId) propertyIds.add(String(propertyId));
+      });
+      const count = propertyIds.size;
       types.push({
         _id: type._id,
         name: type.name,

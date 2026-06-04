@@ -72,11 +72,16 @@ const propertySchema = new mongoose.Schema({
   rooms: [{
     roomType: { type: String },
     roomName: { type: String },
+    imageUrl: { type: String },
     pricePerNight: { type: Number },
     maxGuests: { type: Number },
     bedType: { type: String },
     count: { type: Number, default: 1 },
-    amenities: [{ type: String }]
+    amenities: [{ type: String }],
+    checkIn: { type: String },
+    checkOut: { type: String },
+    offer: { type: String },
+    rules: { type: String }
   }],
   
   // Apartment specific
