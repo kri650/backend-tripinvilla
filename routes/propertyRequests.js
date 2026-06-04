@@ -39,6 +39,7 @@ router.get('/', protect, adminOnly, async (req, res) => {
       amenities_types: r.amenities_types || [],
       original_price: r.original_price,
       price_per_room: r.price_per_room,
+      tax_amount: r.tax_amount,
       checkin_time: r.checkin_time,
       checkout_time: r.checkout_time,
       offers: r.offers || [],
