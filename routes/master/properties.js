@@ -5,6 +5,7 @@ import Property from '../../models/Property.js';
 import { upload } from '../../middleware/upload.js';
 import PropertyTypeMaster from '../../models/PropertyTypeMaster.js';
 import RoomTypeMaster from '../../models/RoomTypeMaster.js';
+import ExperienceMaster from '../../models/ExperienceMaster.js';
 
 const router = express.Router();
 
