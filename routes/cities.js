@@ -15,22 +15,37 @@ const mockCitiesList = [
 // GET /api/cities/analytics
 router.get('/analytics', async (req, res) => {
   try {
-    const aggregations = await Property.aggregate([
-      { 
-        $group: { 
-          _id: { $toLower: "$city" },
-          originalCity: { $first: "$city" },
-          originalState: { $first: "$state" },
-          total: { $sum: 1 },
-          homestays: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Homestay"] }, { $eq: ["$category", "Homestay"] }] }, 1, 0] }},
-          resorts: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Resort"] }, { $eq: ["$category", "Resort"] }] }, 1, 0] }},
-          villas: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Villa"] }, { $eq: ["$category", "Villa"] }] }, 1, 0] }},
-          apartments: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Apartment"] }, { $eq: ["$category", "Apartment"] }] }, 1, 0] }},
-          cottages: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Cottage"] }, { $eq: ["$category", "Cottage"] }] }, 1, 0] }},
-          others: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Farmhouse"] }, { $eq: ["$category", "Others"] }] }, 1, 0] }}
-        }
+    const match = {};
+    if (req.query.dateFrom || req.query.dateTo) {
+      match.createdAt = {};
+      if (req.query.dateFrom) match.createdAt.$gte = new Date(req.query.dateFrom);
+      if (req.query.dateTo) {
+        const dTo = new Date(req.query.dateTo);
+        dTo.setHours(23, 59, 59, 999);
+        match.createdAt.$lte = dTo;
       }
-    ]);
+    }
+
+    const pipeline = [];
+    if (Object.keys(match).length > 0) {
+      pipeline.push({ $match: match });
+    }
+    pipeline.push({ 
+      $group: { 
+        _id: { $toLower: "$city" },
+        originalCity: { $first: "$city" },
+        originalState: { $first: "$state" },
+        total: { $sum: 1 },
+        homestays: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Homestay"] }, { $eq: ["$category", "Homestay"] }] }, 1, 0] }},
+        resorts: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Resort"] }, { $eq: ["$category", "Resort"] }] }, 1, 0] }},
+        villas: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Villa"] }, { $eq: ["$category", "Villa"] }] }, 1, 0] }},
+        apartments: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Apartment"] }, { $eq: ["$category", "Apartment"] }] }, 1, 0] }},
+        cottages: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Cottage"] }, { $eq: ["$category", "Cottage"] }] }, 1, 0] }},
+        others: { $sum: { $cond: [{ $or: [{ $eq: ["$type", "Farmhouse"] }, { $eq: ["$category", "Others"] }] }, 1, 0] }}
+      }
+    });
+
+    const aggregations = await Property.aggregate(pipeline);
 
     const result = aggregations.map(agg => ({
       _id: agg.originalCity || "Unknown",
