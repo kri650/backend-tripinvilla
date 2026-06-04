@@ -14,7 +14,7 @@ router.get('/', async (req, res) => {
   try {
     const propertiesDb = await PropertyMaster.find().sort({ createdAt: -1 }).lean();
     const propertyIds = propertiesDb.map(p => p._id);
-    const linkedProperties = await Property.find({ _id: { $in: propertyIds } }).lean();
+    const linkedProperties = await Property.find({ _id: { $in: propertyIds } }).populate('experiences').lean();
     
     const linkedMap = linkedProperties.reduce((acc, p) => { 
       acc[p._id.toString()] = p; 
