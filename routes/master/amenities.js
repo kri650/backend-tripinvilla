@@ -1,6 +1,7 @@
 import express from 'express';
 import AmenitiesMaster from '../../models/AmenitiesMaster.js';
 import Property from '../../models/Property.js';
+import { upload } from '../../middleware/upload.js';
 
 const router = express.Router();
 
@@ -112,24 +113,40 @@ router.get('/active', async (req, res) => {
 
 // ─── POST /  — Add a new amenity ──────────────────────────────────────────
 // POST /api/admin/amenities
-router.post('/', async (req, res) => {
+router.post('/', upload.single('iconFile'), async (req, res) => {
   try {
-    const newAmenity = await AmenitiesMaster.create(req.body);
+    const data = { ...req.body };
+    if (req.file) {
+      data.icon = req.file.filename.startsWith('http') ? req.file.filename : `/uploads/${req.file.filename}`;
+    }
+    const newAmenity = await AmenitiesMaster.create(data);
     return res.status(201).json(newAmenity);
   } catch (err) {
-    return res.status(201).json({ _id: `am_${Date.now()}`, ...req.body });
+    const data = { ...req.body };
+    if (req.file) {
+      data.icon = req.file.filename.startsWith('http') ? req.file.filename : `/uploads/${req.file.filename}`;
+    }
+    return res.status(201).json({ _id: `am_${Date.now()}`, ...data });
   }
 });
 
 // ─── PUT /:id — Edit amenity ──────────────────────────────────────────────
 // PUT /api/admin/amenities/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', upload.single('iconFile'), async (req, res) => {
   try {
-    const updated = await AmenitiesMaster.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!updated) return res.json({ _id: req.params.id, ...req.body });
+    const data = { ...req.body };
+    if (req.file) {
+      data.icon = req.file.filename.startsWith('http') ? req.file.filename : `/uploads/${req.file.filename}`;
+    }
+    const updated = await AmenitiesMaster.findByIdAndUpdate(req.params.id, data, { new: true });
+    if (!updated) return res.json({ _id: req.params.id, ...data });
     return res.json(updated);
   } catch (err) {
-    return res.json({ _id: req.params.id, ...req.body });
+    const data = { ...req.body };
+    if (req.file) {
+      data.icon = req.file.filename.startsWith('http') ? req.file.filename : `/uploads/${req.file.filename}`;
+    }
+    return res.json({ _id: req.params.id, ...data });
   }
 });
 
