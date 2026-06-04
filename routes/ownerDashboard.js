@@ -17,19 +17,44 @@ router.use(ownerOnly);
 router.get('/stats', async (req, res) => {
   try {
     const ownerId = req.user._id;
+    const { dateFrom, dateTo } = req.query;
     
     // Find all properties owned by this user
     const properties = await Property.find({ owner: ownerId }).select('_id');
     const propertyIds = properties.map(p => p._id);
     
     const totalProperties = properties.length;
-    const activeProperties = await Property.countDocuments({ owner: ownerId, status: 'Active' });
+    
+    let activePropertiesQuery = { owner: ownerId, status: 'Active' };
+    let enquiriesQuery = { property: { $in: propertyIds } };
+    let bookingsQuery = { property: { $in: propertyIds }, paymentStatus: 'Paid' };
+    
+    if (dateFrom || dateTo) {
+      activePropertiesQuery.createdAt = {};
+      enquiriesQuery.createdAt = {};
+      bookingsQuery.createdAt = {};
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom);
+        activePropertiesQuery.createdAt.$gte = fromDate;
+        enquiriesQuery.createdAt.$gte = fromDate;
+        bookingsQuery.createdAt.$gte = fromDate;
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999);
+        activePropertiesQuery.createdAt.$lte = toDate;
+        enquiriesQuery.createdAt.$lte = toDate;
+        bookingsQuery.createdAt.$lte = toDate;
+      }
+    }
+    
+    const activeProperties = await Property.countDocuments(activePropertiesQuery);
     
     // Total enquiries for these properties
-    const totalEnquiries = await Enquiry.countDocuments({ property: { $in: propertyIds } });
+    const totalEnquiries = await Enquiry.countDocuments(enquiriesQuery);
     
     // Total Bookings and Revenue
-    const bookings = await Booking.find({ property: { $in: propertyIds }, paymentStatus: 'Paid' });
+    const bookings = await Booking.find(bookingsQuery);
     const totalRevenue = bookings.reduce((sum, b) => sum + b.totalPrice, 0);
     const totalBookings = bookings.length;
 
@@ -74,8 +99,21 @@ router.get('/properties', async (req, res) => {
 // GET /api/owner-dashboard/enquiries
 router.get('/enquiries', async (req, res) => {
   try {
+    const { dateFrom, dateTo } = req.query;
     const propertyIds = (await Property.find({ owner: req.user._id }).select('_id')).map(p => p._id);
-    const enquiries = await Enquiry.find({ property: { $in: propertyIds } })
+    
+    let query = { property: { $in: propertyIds } };
+    if (dateFrom || dateTo) {
+      query.createdAt = {};
+      if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
+      if (dateTo) {
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = toDate;
+      }
+    }
+
+    const enquiries = await Enquiry.find(query)
       .populate('property', 'name location city')
       .sort({ createdAt: -1 });
     res.json(enquiries);

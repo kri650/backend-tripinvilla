@@ -16,33 +16,75 @@ const pctChange = (todayVal, yesterdayVal) => {
 // GET /api/dashboard/stats
 router.get('/stats', async (req, res) => {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
+    const { dateFrom, dateTo } = req.query;
 
-    const [
-      enquiriesToday,
-      enquiriesYesterday,
-      activeProperties,
-      activePropertiesYesterday,
-      totalOwners
-    ] = await Promise.all([
-      Enquiry.countDocuments({ createdAt: { $gte: today } }),
-      Enquiry.countDocuments({ createdAt: { $gte: yesterday, $lt: today } }),
-      Property.countDocuments({ status: 'Active' }),
-      Property.countDocuments({ status: 'Active', createdAt: { $lt: today } }),
-      Owner.countDocuments({}).catch(() => 0)
+    let enquiryQuery = {};
+    let propertyQuery = { status: 'Active' };
+    let ownerQuery = {};
+
+    if (dateFrom || dateTo) {
+      enquiryQuery.createdAt = {};
+      propertyQuery.createdAt = {};
+      ownerQuery.createdAt = {};
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom);
+        enquiryQuery.createdAt.$gte = fromDate;
+        propertyQuery.createdAt.$gte = fromDate;
+        ownerQuery.createdAt.$gte = fromDate;
+      }
+      if (dateTo) {
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999);
+        enquiryQuery.createdAt.$lte = toDate;
+        propertyQuery.createdAt.$lte = toDate;
+        ownerQuery.createdAt.$lte = toDate;
+      }
+    } else {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      const [
+        enquiriesToday,
+        enquiriesYesterday,
+        activeProperties,
+        activePropertiesYesterday,
+        totalOwners
+      ] = await Promise.all([
+        Enquiry.countDocuments({ createdAt: { $gte: today } }),
+        Enquiry.countDocuments({ createdAt: { $gte: yesterday, $lt: today } }),
+        Property.countDocuments({ status: 'Active' }),
+        Property.countDocuments({ status: 'Active', createdAt: { $lt: today } }),
+        Owner.countDocuments({}).catch(() => 0)
+      ]);
+
+      return res.json({
+        totalEnquiriesToday: enquiriesToday,
+        activeProperties,
+        totalOwners,
+        compareYesterday: {
+          enquiries: (enquiriesToday - enquiriesYesterday >= 0 ? '+' : '') + pctChange(enquiriesToday, enquiriesYesterday),
+          properties: (activeProperties - activePropertiesYesterday >= 0 ? '+' : '') + pctChange(activeProperties, activePropertiesYesterday),
+          owners: '+0.0'
+        }
+      });
+    }
+
+    const [enquiriesCount, activePropertiesCount, totalOwnersCount] = await Promise.all([
+      Enquiry.countDocuments(enquiryQuery),
+      Property.countDocuments(propertyQuery),
+      Owner.countDocuments(ownerQuery).catch(() => 0)
     ]);
 
     res.json({
-      totalEnquiriesToday: enquiriesToday,
-      activeProperties,
-      totalOwners,
+      totalEnquiriesToday: enquiriesCount,
+      activeProperties: activePropertiesCount,
+      totalOwners: totalOwnersCount,
       compareYesterday: {
-        enquiries: (enquiriesToday - enquiriesYesterday >= 0 ? '+' : '') + pctChange(enquiriesToday, enquiriesYesterday),
-        properties: (activeProperties - activePropertiesYesterday >= 0 ? '+' : '') + pctChange(activeProperties, activePropertiesYesterday),
-        owners: '+0.0'
+        enquiries: '0.0',
+        properties: '0.0',
+        owners: '0.0'
       }
     });
   } catch (err) {
@@ -56,18 +98,30 @@ router.get('/stats', async (req, res) => {
 });
 
 // 2. Enquiries Over Time Chart
-// GET /api/dashboard/enquiries-chart?year=2026
+// GET /api/dashboard/enquiries-chart
 router.get('/enquiries-chart', async (req, res) => {
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const year = Number(req.query.year) || new Date().getFullYear();
+  const { year, dateFrom, dateTo } = req.query;
   const baseData = months.map(m => ({ month: m, count: 0 }));
 
   try {
-    const start = new Date(year, 0, 1);
-    const end = new Date(year + 1, 0, 1);
+    let start, end;
+    if (dateFrom || dateTo) {
+      start = dateFrom ? new Date(dateFrom) : new Date(0);
+      if (dateTo) {
+        end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+      } else {
+        end = new Date();
+      }
+    } else {
+      const yearNum = Number(year) || new Date().getFullYear();
+      start = new Date(yearNum, 0, 1);
+      end = new Date(yearNum + 1, 0, 1);
+    }
 
     const aggregations = await Enquiry.aggregate([
-      { $match: { createdAt: { $gte: start, $lt: end } } },
+      { $match: { createdAt: { $gte: start, $lte: end } } },
       { $group: { _id: { $month: '$createdAt' }, count: { $sum: 1 } } }
     ]);
 
@@ -86,9 +140,25 @@ router.get('/enquiries-chart', async (req, res) => {
 // GET /api/dashboard/property-categories
 router.get('/property-categories', async (req, res) => {
   try {
-    const aggregations = await Property.aggregate([
-      { $group: { _id: "$type", count: { $sum: 1 } } }
-    ]);
+    const { dateFrom, dateTo } = req.query;
+    const match = {};
+    if (dateFrom || dateTo) {
+      match.createdAt = {};
+      if (dateFrom) match.createdAt.$gte = new Date(dateFrom);
+      if (dateTo) {
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999);
+        match.createdAt.$lte = toDate;
+      }
+    }
+
+    const pipeline = [];
+    if (Object.keys(match).length > 0) {
+      pipeline.push({ $match: match });
+    }
+    pipeline.push({ $group: { _id: "$type", count: { $sum: 1 } } });
+
+    const aggregations = await Property.aggregate(pipeline);
 
     const categories = [];
     let total = 0;
@@ -115,11 +185,27 @@ router.get('/property-categories', async (req, res) => {
 // GET /api/dashboard/top-properties
 router.get('/top-properties', async (req, res) => {
   try {
-    const enquiryCounts = await Enquiry.aggregate([
-      { $group: { _id: '$property_id', totalEnquiries: { $sum: 1 } } },
-      { $sort: { totalEnquiries: -1 } },
-      { $limit: 10 }
-    ]);
+    const { dateFrom, dateTo } = req.query;
+    const match = {};
+    if (dateFrom || dateTo) {
+      match.createdAt = {};
+      if (dateFrom) match.createdAt.$gte = new Date(dateFrom);
+      if (dateTo) {
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999);
+        match.createdAt.$lte = toDate;
+      }
+    }
+
+    const pipeline = [];
+    if (Object.keys(match).length > 0) {
+      pipeline.push({ $match: match });
+    }
+    pipeline.push({ $group: { _id: '$property_id', totalEnquiries: { $sum: 1 } } });
+    pipeline.push({ $sort: { totalEnquiries: -1 } });
+    pipeline.push({ $limit: 10 });
+
+    const enquiryCounts = await Enquiry.aggregate(pipeline);
 
     const propertyIds = enquiryCounts.map(e => e._id).filter(Boolean);
     const propertiesDb = await Property.find({ _id: { $in: propertyIds } });
