@@ -1,6 +1,7 @@
 import express from 'express';
 import User from '../models/User.js';
 import { protect } from '../middleware/auth.js';
+import { upload } from '../middleware/upload.js';
 
 const router = express.Router();
 
@@ -19,7 +20,7 @@ router.get('/profile', protect, async (req, res) => {
 });
 
 // UPDATE user profile
-router.put('/profile', protect, async (req, res) => {
+router.put('/profile', protect, upload.single('avatar'), async (req, res) => {
   try {
     const { name, email, phone, avatar, company, pan, bank, accountNum, ifsc, address, city, state, pincode, citizenship, residence, emergencyName, emergencyPhone, emergencyEmail, role } = req.body;
     if (req.user.id && req.user.id.toString().startsWith('fake_')) {
@@ -28,10 +29,15 @@ router.put('/profile', protect, async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
+    let avatarUrl = avatar;
+    if (req.file) {
+      avatarUrl = req.file.filename;
+    }
+
     if (name !== undefined) user.name = name;
     if (email !== undefined) user.email = email;
     if (phone !== undefined) user.phone = phone;
-    if (avatar !== undefined) user.avatar = avatar;
+    if (avatarUrl !== undefined) user.avatar = avatarUrl;
     if (company !== undefined) user.company = company;
     if (pan !== undefined) user.pan = pan;
     if (bank !== undefined) user.bank = bank;
