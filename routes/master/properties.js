@@ -79,7 +79,15 @@ router.get('/', async (req, res) => {
 // POST /api/master/properties
 router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'videos', maxCount: 5 }]), async (req, res) => {
   try {
-    const count = await PropertyMaster.countDocuments();
+    const allProps = await PropertyMaster.find({}, 'propertyNo').lean();
+    let maxNo = 100;
+    allProps.forEach(p => {
+      if (p.propertyNo && p.propertyNo.startsWith('PM-')) {
+        const num = parseInt(p.propertyNo.replace('PM-', ''), 10);
+        if (!isNaN(num) && num > maxNo) maxNo = num;
+      }
+    });
+    const nextNo = maxNo + 1;
     const data = { ...req.body };
 
     // Parse stringified fields from FormData
@@ -102,7 +110,7 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
     }
 
     const newPropertyMaster = await PropertyMaster.create({
-      propertyNo: `PM-${100 + count + 1}`,
+      propertyNo: `PM-${nextNo}`,
       ...data
     });
 
@@ -117,7 +125,7 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
       }
 
       const propData = {
-        propertyNo: `PM-${100 + count + 1}`,
+        propertyNo: `PM-${nextNo}`,
         name: data.propertyName || 'Unnamed Property',
         type: data.propertyType || 'Homestay',
         location: data.location || 'Unknown',
