@@ -356,14 +356,31 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
 // GET /api/properties/:id/landmarks
 router.get('/:id/landmarks', async (req, res) => {
   try {
+    // 1st: Check the PropertyLandmark collection
     let landmarks = await PropertyLandmark.find({ property_id: req.params.id });
     if (!landmarks || landmarks.length === 0) {
+      // 2nd: Fallback to Property.landmarks embedded array
       const property = await Property.findById(req.params.id);
       if (property && Array.isArray(property.landmarks) && property.landmarks.length > 0) {
         landmarks = property.landmarks;
       }
     }
-    res.json(landmarks);
+    if (!landmarks || landmarks.length === 0) {
+      // 3rd: Fallback to PropertyMaster.landmarks (added by admin)
+      try {
+        const { default: PropertyMaster } = await import('../models/PropertyMaster.js');
+        const master = await PropertyMaster.findOne({ linkedPropertyId: req.params.id });
+        if (master && Array.isArray(master.landmarks) && master.landmarks.length > 0) {
+          landmarks = master.landmarks.map(lm => ({
+            landmark_name: lm.landmark_name || lm.name || '',
+            landmark_type: lm.landmark_type || lm.type || lm.label || '',
+            landmark_image_url: lm.landmark_image_url || lm.img || lm.image || '',
+            distance: lm.distance || ''
+          }));
+        }
+      } catch (e) { /* PropertyMaster may not exist */ }
+    }
+    res.json(landmarks || []);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

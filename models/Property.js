@@ -87,13 +87,13 @@ const propertySchema = new mongoose.Schema({
   // Apartment specific
   floorNumber: { type: String },
   totalFloorsBuilding: { type: String },
-  furnishedStatus: { type: String, default: 'Fully Furnished' },
+  furnishedStatus: { type: String, default: '' },
   washingMachine: { type: Boolean, default: false },
   societyAmenities: [{ type: String }],
   
   // Cottage specific
   bonfireArea: { type: Boolean, default: false },
-  viewType: { type: String, default: 'Mountain' },
+  viewType: { type: String, default: '' },
   outdoorSeating: { type: Boolean, default: false },
   nearestHikingTrail: { type: String },
   distanceFromCity: { type: String },
