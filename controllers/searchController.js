@@ -70,7 +70,8 @@ function buildFilter(params) {
         { roomType: new RegExp(roomType.trim(), "i") },
         { roomType: { $exists: false } },
         { roomType: null },
-        { roomType: "" }
+        { roomType: "" },
+        { roomType: "1 Room" }
       ]
     });
   }

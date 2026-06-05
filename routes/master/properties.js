@@ -205,7 +205,7 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
     res.status(201).json(newPropertyMaster);
   } catch (err) {
     console.error("Error creating PropertyMaster:", err);
-    res.status(400).json({ message: "Failed to create property master" });
+    res.status(400).json({ message: "Failed to create property master: " + err.message });
   }
 });
 
