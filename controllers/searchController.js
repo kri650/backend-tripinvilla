@@ -64,13 +64,30 @@ function buildFilter(params) {
 
   // ── Room Type ───────────────────────────────────────────────────────
   if (roomType && roomType !== "any" && roomType !== "") {
-    filter.roomType = new RegExp(roomType.trim(), "i");
+    filter.$and = filter.$and || [];
+    filter.$and.push({
+      $or: [
+        { roomType: new RegExp(roomType.trim(), "i") },
+        { roomType: { $exists: false } },
+        { roomType: null },
+        { roomType: "" }
+      ]
+    });
   }
 
   // ── Food Preference ─────────────────────────────────────────────────
   // Only apply if explicitly set and not 'none'
   if (foodPreference && foodPreference !== "any" && foodPreference !== "none") {
-    filter.foodPreference = { $in: [foodPreference, "both"] };
+    filter.$and = filter.$and || [];
+    filter.$and.push({
+      $or: [
+        { foodPreference: { $in: [foodPreference, "both"] } },
+        { foodPreference: { $exists: false } },
+        { foodPreference: null },
+        { foodPreference: "" },
+        { foodPreference: "none" }
+      ]
+    });
   }
 
   // ── Guests / Capacity ───────────────────────────────────────────────
