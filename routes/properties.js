@@ -55,9 +55,14 @@ const roomToRequestPayload = ({ room, property, reqUser, ownerName, ownerContact
     offers: normalized.offer ? [normalized.offer] : [],
     checkin_time: normalized.checkIn || property.checkIn,
     checkout_time: normalized.checkOut || property.checkOut,
-    rules: normalized.rules
-      ? [{ title: 'Property Rules', points: normalized.rules.split('\n').filter(Boolean) }]
-      : [],
+    rules: (() => {
+      const rulePoints = normalized.rules 
+        ? normalized.rules.split('\n').filter(Boolean) 
+        : [];
+      return rulePoints.length > 0 
+        ? [{ title: 'Property Rules', points: rulePoints }] 
+        : [];
+    })(),
     admin_status: isAdmin ? 'approved' : 'pending',
     status: isAdmin ? 'Accepted' : 'pending'
   };
