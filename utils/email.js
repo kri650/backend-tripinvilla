@@ -181,3 +181,42 @@ export const sendPasswordResetOTP = async (email, name, otpCode) => {
     throw new Error('Failed to send email. Please check SMTP configuration.');
   }
 };
+
+export const sendContactFormMessage = async (adminEmail, visitorName, visitorEmail, visitorPhone, visitorMessage) => {
+  const mailOptions = {
+    from: `"Tripinstays" <${process.env.EMAIL_USER}>`,
+    to: adminEmail,
+    subject: `📬 New Contact Form Submission from ${visitorName}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #E5E7EB; border-radius: 16px; padding: 32px; box-sizing: border-box;">
+        <h2 style="color: #1F2937; font-size: 24px; font-weight: 700; margin-bottom: 8px; font-family: 'Lato', sans-serif;">New Contact Form Message</h2>
+        <p style="color: #9CA3AF; font-size: 13px; margin-bottom: 24px;">Received from Contact Us page</p>
+        
+        <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+          <p style="margin: 12px 0; color: #4B5563;"><strong style="color: #1F2937;">Name:</strong> ${visitorName}</p>
+          <p style="margin: 12px 0; color: #4B5563;"><strong style="color: #1F2937;">Email:</strong> ${visitorEmail}</p>
+          <p style="margin: 12px 0; color: #4B5563;"><strong style="color: #1F2937;">Phone:</strong> ${visitorPhone}</p>
+          <hr style="border: none; border-top: 1px solid #E5E7EB; margin: 16px 0;">
+          <p style="margin: 12px 0; color: #4B5563;"><strong style="color: #1F2937;">Message:</strong></p>
+          <p style="margin: 12px 0; color: #4B5563; white-space: pre-wrap; line-height: 1.6;">${visitorMessage}</p>
+        </div>
+
+        <div style="background: #ECFDF5; border-left: 4px solid #10B981; padding: 16px; border-radius: 4px; margin-bottom: 24px;">
+          <p style="margin: 0; color: #065F46; font-size: 14px; font-weight: 500;">💬 This visitor has requested to be contacted. Please respond promptly.</p>
+        </div>
+
+        <p style="color: #9CA3AF; font-size: 12px; line-height: 18px; margin: 0;">
+          You can reply directly to this email or contact them at ${visitorEmail} or ${visitorPhone}
+        </p>
+      </div>
+    `
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`📬 Contact form email sent to admin: ${adminEmail}`);
+  } catch (error) {
+    console.error('Error sending contact form email:', error);
+    throw error;
+  }
+};

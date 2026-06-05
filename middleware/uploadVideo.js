@@ -31,7 +31,9 @@ const fileFilter = (req, file, cb) => {
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Only videos (mp4, mov, m4v, webm) are allowed'), false);
+    const error = new Error('Only videos (mp4, mov, m4v, webm) are allowed');
+    error.status = 400;
+    cb(error, false);
   }
 };
 

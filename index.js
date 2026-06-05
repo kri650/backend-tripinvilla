@@ -140,7 +140,8 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date() }
 // Global error handler
 app.use((err, req, res, next) => {
   console.error('Unhandled Server Error:', err);
-  res.status(err.status || 500).json({ 
+  res.status(err.status || 500).json({
+    success: false,
     message: err.message || 'Internal Server Error',
     error: process.env.NODE_ENV === 'development' ? err : {}
   });
