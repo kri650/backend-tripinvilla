@@ -101,20 +101,22 @@ function buildFilter(params) {
   if (featuredOnly === "true" || featuredOnly === true) filter.isFeatured = true;
 
   // ── Price range ─────────────────────────────────────────────────────
-  // DB uses 'price' field — also check bestRoomRate as fallback
   if (minPrice || maxPrice) {
     const min = minPrice ? Number(minPrice) : null;
     const max = maxPrice ? Number(maxPrice) : null;
     const priceCondition = {};
-    if (min) priceCondition.$gte = min;
-    if (max) priceCondition.$lte = max;
-    filter.$and = filter.$and || [];
-    filter.$and.push({
-      $or: [
-        { price: priceCondition },
-        { bestRoomRate: priceCondition },
-      ]
-    });
+    if (min != null && !Number.isNaN(min)) priceCondition.$gte = min;
+    if (max != null && !Number.isNaN(max)) priceCondition.$lte = max;
+    if (Object.keys(priceCondition).length > 0) {
+      filter.$and = filter.$and || [];
+      filter.$and.push({
+        $or: [
+          { price: priceCondition },
+          { price_per_night: priceCondition },
+          { bestRoomRate: priceCondition },
+        ],
+      });
+    }
   }
 
   // ── Date availability ───────────────────────────────────────────────

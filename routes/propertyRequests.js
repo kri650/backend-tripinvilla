@@ -31,21 +31,48 @@ const normalizeRuleSections = (rules) => {
     .filter(rule => rule.title || rule.points.length > 0);
 };
 
-const requestToPropertyRoom = (request) => ({
-  roomType: request.room_type || 'Deluxe Room',
-  roomName: request.room_type || 'Deluxe Room',
-  imageUrl: request.room_image_url || (Array.isArray(request.room_images) ? request.room_images[0] : ''),
-  pricePerNight: Number(request.price_per_room) || 0,
+const normalizeRoomEntry = (room = {}) => ({
+  room_type: room.room_type || '',
+  room_image_url: room.room_image_url || '',
+  room_images: Array.isArray(room.room_images) ? room.room_images : (room.room_image_url ? [room.room_image_url] : []),
+  bed_type: room.bed_type || '',
+  amenities_types: Array.isArray(room.amenities_types) ? room.amenities_types : [],
+  experiences: Array.isArray(room.experiences) ? room.experiences : [],
+  original_price: room.original_price != null ? Number(room.original_price) : undefined,
+  price_per_room: room.price_per_room != null ? Number(room.price_per_room) : undefined,
+  tax_amount: room.tax_amount != null ? Number(room.tax_amount) : undefined,
+  checkin_time: room.checkin_time || '',
+  checkout_time: room.checkout_time || '',
+  offers: Array.isArray(room.offers) ? room.offers : [],
+  rules: normalizeRuleSections(room.rules)
+});
+
+const getRoomsFromRequest = (request) => {
+  if (Array.isArray(request.rooms) && request.rooms.length > 0) {
+    return request.rooms.map(normalizeRoomEntry);
+  }
+  if (request.room_type || request.price_per_room) {
+    return [normalizeRoomEntry(request)];
+  }
+  return [];
+};
+
+const roomToPropertyRoom = (room, requestId) => ({
+  roomType: room.room_type || 'Deluxe Room',
+  roomName: room.room_type || 'Deluxe Room',
+  imageUrl: room.room_image_url || (Array.isArray(room.room_images) ? room.room_images[0] : ''),
+  pricePerNight: Number(room.price_per_room) || 0,
   maxGuests: 2,
-  bedType: request.bed_type || '',
+  bedType: room.bed_type || '',
   count: 1,
-  amenities: Array.isArray(request.amenities_types) ? request.amenities_types : [],
-  checkIn: request.checkin_time || '',
-  checkOut: request.checkout_time || '',
-  offer: Array.isArray(request.offers) ? request.offers[0] || '' : '',
-  rules: normalizeRuleSections(request.rules)
+  amenities: Array.isArray(room.amenities_types) ? room.amenities_types : [],
+  checkIn: room.checkin_time || '',
+  checkOut: room.checkout_time || '',
+  offer: Array.isArray(room.offers) ? room.offers[0] || '' : '',
+  rules: normalizeRuleSections(room.rules)
     .flatMap(rule => rule.points)
-    .join('\n')
+    .join('\n'),
+  requestId
 });
 
 const syncAcceptedRoomToProperty = async (request) => {
@@ -55,21 +82,82 @@ const syncAcceptedRoomToProperty = async (request) => {
   const property = await Property.findById(propId);
   if (!property) return;
 
-  const room = requestToPropertyRoom(request);
-  const rooms = Array.isArray(property.rooms) ? property.rooms.map(r => r.toObject ? r.toObject() : r) : [];
-  const roomIndex = rooms.findIndex(existing => {
-    if (request._id && existing.requestId && String(existing.requestId) === String(request._id)) return true;
-    const sameType = String(existing.roomType || '').toLowerCase() === String(room.roomType || '').toLowerCase();
-    const samePrice = Number(existing.pricePerNight || 0) === Number(room.pricePerNight || 0);
-    return sameType && samePrice;
-  });
+  const requestRooms = getRoomsFromRequest(request);
+  const propertyRooms = Array.isArray(property.rooms)
+    ? property.rooms.map(r => (r.toObject ? r.toObject() : r))
+    : [];
 
-  if (roomIndex >= 0) rooms[roomIndex] = { ...rooms[roomIndex], ...room };
-  else rooms.push(room);
+  for (const roomData of requestRooms) {
+    const room = roomToPropertyRoom(roomData, request._id);
+    const roomIndex = propertyRooms.findIndex(existing => {
+      const sameType = String(existing.roomType || '').toLowerCase() === String(room.roomType || '').toLowerCase();
+      const samePrice = Number(existing.pricePerNight || 0) === Number(room.pricePerNight || 0);
+      return sameType && samePrice;
+    });
 
-  property.rooms = rooms;
+    if (roomIndex >= 0) propertyRooms[roomIndex] = { ...propertyRooms[roomIndex], ...room };
+    else propertyRooms.push(room);
+  }
+
+  property.rooms = propertyRooms;
   property.status = 'Active';
   await property.save();
+};
+
+const formatGuestRoom = (requestDoc, room) => ({
+  _id: requestDoc._id,
+  title: room.room_type || 'Deluxe Room',
+  img: room.room_image_url || (requestDoc.property?.images && requestDoc.property.images.length > 0 ? requestDoc.property.images[0] : 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=600&q=80'),
+  images: room.room_images && room.room_images.length > 0 ? room.room_images : (room.room_image_url ? [room.room_image_url] : []),
+  features: [...(room.amenities_types || [])],
+  offers: room.offers || [],
+  beds: room.bed_type || '2 Beds',
+  rooms: '1 Room',
+  guests: '3 Person',
+  originalPrice: room.original_price,
+  price: room.price_per_room || 1400,
+  checkIn: room.checkin_time,
+  checkOut: room.checkout_time,
+  tax_amount: room.tax_amount,
+  roomName: room.room_type || 'Deluxe Room',
+  rules: normalizeRuleSections(room.rules)
+});
+
+const formatAdminRequest = (r) => {
+  const rooms = getRoomsFromRequest(r);
+  const firstRoom = rooms[0] || {};
+  const prices = rooms.map(room => Number(room.price_per_room || 0)).filter(Boolean);
+  const minPrice = prices.length > 0 ? Math.min(...prices) : (r.price_per_room || r.priceByOwner);
+
+  return {
+    _id: r._id,
+    requestNo: r.requestNo,
+    image: firstRoom.room_image_url || r.room_image_url || r.image || (r.property?.images && r.property.images[0]) || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60',
+    propertyName: r.property?.name || r.propertyName,
+    location: r.property?.location || r.location,
+    category: r.property?.type || r.category,
+    ownerName: r.ownerName,
+    ownerContact: r.ownerContact,
+    priceByOwner: minPrice,
+    about: r.property?.description || '',
+    status: r.admin_status === 'approved' ? 'Accepted' : (r.admin_status === 'rejected' ? 'Rejected' : 'NotAccepted'),
+    createdAt: r.createdAt,
+    roomCount: rooms.length,
+    rooms,
+    room_type: firstRoom.room_type || r.room_type,
+    bed_type: firstRoom.bed_type || r.bed_type,
+    amenities_types: firstRoom.amenities_types || r.amenities_types || [],
+    original_price: firstRoom.original_price ?? r.original_price,
+    price_per_room: firstRoom.price_per_room ?? r.price_per_room,
+    checkin_time: firstRoom.checkin_time || r.checkin_time,
+    checkout_time: firstRoom.checkout_time || r.checkout_time,
+    offers: firstRoom.offers || r.offers || [],
+    rules: normalizeRuleSections(firstRoom.rules?.length ? firstRoom.rules : r.rules),
+    room_image_url: firstRoom.room_image_url || r.room_image_url,
+    room_images: firstRoom.room_images || r.room_images || [],
+    tax_amount: firstRoom.tax_amount ?? r.tax_amount,
+    property_id: r.property?._id || r.property_id
+  };
 };
 
 // GET all property requests (Admin View)
@@ -86,34 +174,7 @@ router.get('/', protect, adminOnly, async (req, res) => {
       PropertyRequest.countDocuments({ admin_status: 'rejected' })
     ]);
 
-    let formattedRequests = requestsDb.map(r => ({
-      _id: r._id,
-      requestNo: r.requestNo,
-      image: r.room_image_url || r.image || (r.property?.images && r.property.images[0]) || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60',
-      propertyName: r.property?.name || r.propertyName,
-      location: r.property?.location || r.location,
-      category: r.property?.type || r.category,
-      ownerName: r.ownerName,
-      ownerContact: r.ownerContact,
-      priceByOwner: r.price_per_room || r.priceByOwner,
-      about: r.property?.description || '',
-      status: r.admin_status === 'approved' ? 'Accepted' : (r.admin_status === 'rejected' ? 'Rejected' : 'NotAccepted'),
-      createdAt: r.createdAt,
-      // Full room details
-      room_type: r.room_type,
-      bed_type: r.bed_type,
-      amenities_types: r.amenities_types || [],
-      original_price: r.original_price,
-      price_per_room: r.price_per_room,
-      checkin_time: r.checkin_time,
-      checkout_time: r.checkout_time,
-      offers: r.offers || [],
-      rules: normalizeRuleSections(r.rules),
-      room_image_url: r.room_image_url,
-      room_images: r.room_images || [],
-      tax_amount: r.tax_amount,
-      property_id: r.property?._id || r.property_id
-    }));
+    const formattedRequests = requestsDb.map(formatAdminRequest);
 
     res.json({
       requests: formattedRequests,
@@ -188,24 +249,28 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
       
     const formatted = requests.map(r => {
       const obj = r.toObject();
+      const rooms = getRoomsFromRequest(r);
+      const firstRoom = rooms[0] || {};
       return {
         ...obj,
         id: r._id,
         property_id: r.property?._id || r.property_id,
         propertyName: r.property?.name || r.propertyName,
         category: r.property?.type || r.category,
-        room_type: r.room_type,
-        room_image_url: r.room_image_url,
-        bed_type: r.bed_type,
-        amenities_types: r.amenities_types,
-        original_price: r.original_price,
-        price_per_room: r.price_per_room,
-        checkin_time: r.checkin_time,
-        checkout_time: r.checkout_time,
-        offers: r.offers,
-        room_images: r.room_images || [],
-        tax_amount: r.tax_amount,
-        rules: normalizeRuleSections(r.rules),
+        roomCount: rooms.length,
+        rooms,
+        room_type: firstRoom.room_type || r.room_type,
+        room_image_url: firstRoom.room_image_url || r.room_image_url,
+        bed_type: firstRoom.bed_type || r.bed_type,
+        amenities_types: firstRoom.amenities_types || r.amenities_types,
+        original_price: firstRoom.original_price ?? r.original_price,
+        price_per_room: firstRoom.price_per_room ?? r.price_per_room,
+        checkin_time: firstRoom.checkin_time || r.checkin_time,
+        checkout_time: firstRoom.checkout_time || r.checkout_time,
+        offers: firstRoom.offers || r.offers,
+        room_images: firstRoom.room_images || r.room_images || [],
+        tax_amount: firstRoom.tax_amount ?? r.tax_amount,
+        rules: normalizeRuleSections(firstRoom.rules?.length ? firstRoom.rules : r.rules),
         admin_status: r.admin_status || 'pending'
       };
     });
@@ -324,24 +389,9 @@ router.get('/property/:propertyId', async (req, res) => {
       ],
       admin_status: 'approved'
     }).populate('property', 'images');
-    const formatted = requests.map(r => ({
-      _id: r._id,
-      title: r.room_type || 'Deluxe Room',
-      img: r.room_image_url || (r.property?.images && r.property.images.length > 0 ? r.property.images[0] : 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=600&q=80'),
-      images: r.room_images && r.room_images.length > 0 ? r.room_images : (r.room_image_url ? [r.room_image_url] : []),
-      features: [...(r.amenities_types || [])],
-      offers: r.offers || [],
-      beds: r.bed_type || '2 Beds',
-      rooms: '1 Room',
-      guests: '3 Person',
-      originalPrice: r.original_price,
-      price: r.price_per_room || 1400,
-      checkIn: r.checkin_time,
-      checkOut: r.checkout_time,
-      tax_amount: r.tax_amount,
-      roomName: r.room_type || 'Deluxe Room',
-      rules: normalizeRuleSections(r.rules)
-    }));
+    const formatted = requests.flatMap(r =>
+      getRoomsFromRequest(r).map(room => formatGuestRoom(r, room))
+    );
     res.json(formatted);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -349,17 +399,35 @@ router.get('/property/:propertyId', async (req, res) => {
 });
 
 
-// POST /api/property-requests -> Submit request
+// POST /api/property-requests -> Submit request (single or multiple rooms in one request)
 router.post('/', protect, ownerOnly, async (req, res) => {
   try {
-    const { property_id, room_type, room_image_url, bed_type, amenities_types, original_price, price_per_room, tax_amount, checkin_time, checkout_time, offers, rules } = req.body;
-    
+    const { property_id, rooms: roomsPayload } = req.body;
+    const {
+      room_type, room_image_url, bed_type, amenities_types, original_price,
+      price_per_room, tax_amount, checkin_time, checkout_time, offers, rules
+    } = req.body;
+
     const property = await Property.findOne({ _id: property_id, owner: req.user._id });
     if (!property) return res.status(404).json({ message: 'Property not found or access denied' });
-    
+
+    const normalizedRooms = Array.isArray(roomsPayload) && roomsPayload.length > 0
+      ? roomsPayload.map(normalizeRoomEntry)
+      : [normalizeRoomEntry({
+          room_type, room_image_url, bed_type, amenities_types, original_price,
+          price_per_room, tax_amount, checkin_time, checkout_time, offers, rules,
+          experiences: req.body.experiences
+        })];
+
+    if (!normalizedRooms.length || !normalizedRooms[0].room_type || !normalizedRooms[0].price_per_room) {
+      return res.status(400).json({ message: 'At least one valid room with room type and price is required' });
+    }
+
     const count = await PropertyRequest.countDocuments();
     const requestNo = `REQ-${3000 + count + 1}`;
-    
+    const firstRoom = normalizedRooms[0];
+    const prices = normalizedRooms.map(room => Number(room.price_per_room || 0)).filter(Boolean);
+
     const newRequest = await PropertyRequest.create({
       requestNo,
       property: property_id,
@@ -369,25 +437,31 @@ router.post('/', protect, ownerOnly, async (req, res) => {
       category: property.type,
       ownerName: req.user.name,
       ownerContact: req.user.phone || req.user.email || 'N/A',
-      priceByOwner: Number(price_per_room),
-      
-      room_type,
-      room_image_url,
-      bed_type,
-      amenities_types: Array.isArray(amenities_types) ? amenities_types : [],
-      original_price: original_price ? Number(original_price) : undefined,
-      price_per_room: Number(price_per_room),
-      tax_amount: tax_amount ? Number(tax_amount) : undefined,
-      checkin_time,
-      checkout_time,
-      offers: Array.isArray(offers) ? offers : [],
-      rules: normalizeRuleSections(rules),
+      priceByOwner: prices.length > 0 ? Math.min(...prices) : Number(firstRoom.price_per_room),
+      rooms: normalizedRooms,
+      room_type: firstRoom.room_type,
+      room_image_url: firstRoom.room_image_url,
+      bed_type: firstRoom.bed_type,
+      amenities_types: firstRoom.amenities_types,
+      original_price: firstRoom.original_price,
+      price_per_room: firstRoom.price_per_room,
+      tax_amount: firstRoom.tax_amount,
+      checkin_time: firstRoom.checkin_time,
+      checkout_time: firstRoom.checkout_time,
+      offers: firstRoom.offers,
+      rules: firstRoom.rules,
       admin_status: 'pending',
-      status: 'pending' // compatibility
+      status: 'pending'
     });
-    
-    await syncRoomMasters(req.body);
-    
+
+    for (const room of normalizedRooms) {
+      await syncRoomMasters({
+        room_type: room.room_type,
+        amenities_types: room.amenities_types,
+        experiences: room.experiences
+      });
+    }
+
     res.status(201).json(newRequest);
   } catch (err) {
     res.status(400).json({ message: err.message });
