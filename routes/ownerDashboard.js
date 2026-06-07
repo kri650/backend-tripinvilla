@@ -52,6 +52,16 @@ router.get('/stats', async (req, res) => {
     
     // Total enquiries for these properties
     const totalEnquiries = await Enquiry.countDocuments(enquiriesQuery);
+
+    // Count replied enquiries for response rate
+    const repliedEnquiries = await Enquiry.countDocuments({
+      ...enquiriesQuery,
+      $or: [
+        { status: { $in: ['Replied', 'Closed'] } },
+        { repliedAt: { $ne: null } }
+      ]
+    });
+    const responseRate = totalEnquiries > 0 ? Math.round((repliedEnquiries / totalEnquiries) * 100) : 0;
     
     // Total Bookings and Revenue
     const bookings = await Booking.find(bookingsQuery);
@@ -71,6 +81,7 @@ router.get('/stats', async (req, res) => {
       totalProperties,
       activeProperties,
       totalEnquiries,
+      responseRate,
       totalRevenue,
       totalBookings,
       occupancyRate,
