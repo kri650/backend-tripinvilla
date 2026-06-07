@@ -221,20 +221,30 @@ router.get('/top-properties', async (req, res) => {
       if (e._id) enquiryMap[e._id.toString()] = e.totalEnquiries;
     }
 
-    const formatted = allProperties.slice(0, 10).map((p, index) => ({
-      ...p._doc, // Send full property details for PropertyViewModal
-      propertyNo: `PR-${1000 + index}`,
-      id: p._id,
-      image: p.images && p.images[0] ? p.images[0] : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60',
-      name: p.name,
-      location: `${p.city || ''}${p.state ? ', ' + p.state : ''}`,
-      category: p.type || 'Villa',
-      bestRoomRate: p.price || 1200,
-      rooms: p.bedRooms || 3,
-      totalEnquiries: enquiryMap[p._id.toString()] || 0,
-      rating: p.rating || 4.5,
-      status: p.status || 'Active'
-    }));
+    const formatted = allProperties.slice(0, 10).map((p, index) => {
+      // Compute best room rate from property rooms array
+      let bestRoomRate = p.price || p.price_per_night || 0;
+      if (Array.isArray(p.rooms) && p.rooms.length > 0) {
+        const roomPrices = p.rooms.map(r => Number(r.pricePerNight || 0)).filter(Boolean);
+        if (roomPrices.length > 0) {
+          bestRoomRate = Math.min(...roomPrices);
+        }
+      }
+      return {
+        ...p._doc, // Send full property details for PropertyViewModal
+        propertyNo: `PR-${1000 + index}`,
+        id: p._id,
+        image: p.images && p.images[0] ? p.images[0] : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=500&auto=format&fit=crop&q=60',
+        name: p.name,
+        location: `${p.city || ''}${p.state ? ', ' + p.state : ''}`,
+        category: p.type || 'Villa',
+        bestRoomRate,
+        rooms: p.bedRooms || 3,
+        totalEnquiries: enquiryMap[p._id.toString()] || 0,
+        rating: p.rating || 4.5,
+        status: p.status || 'Active'
+      };
+    });
 
     res.json(formatted);
   } catch (err) {

@@ -74,6 +74,7 @@ const propertySchema = new mongoose.Schema({
     roomName: { type: String },
     imageUrl: { type: String },
     pricePerNight: { type: Number },
+    originalPrice: { type: Number },
     maxGuests: { type: Number },
     bedType: { type: String },
     count: { type: Number, default: 1 },

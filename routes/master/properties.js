@@ -172,25 +172,10 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
       // Sync rooms to PropertyRequest
       if (Array.isArray(data.rooms) && data.rooms.length > 0) {
         const PropertyRequest = (await import('../../models/PropertyRequest.js')).default;
-        let reqCount = await PropertyRequest.countDocuments();
-        const roomPromises = data.rooms.map(async (room, idx) => {
+        
+        const normalizedRooms = data.rooms.map(room => {
           const roomType = room.roomType || 'Deluxe';
-          // Auto-add room type to master if missing
-          const existingRoomType = await RoomTypeMaster.findOne({ name: new RegExp('^' + roomType + '$', 'i') });
-          if (!existingRoomType) {
-            await RoomTypeMaster.create({ name: roomType, status: 'Active' });
-          }
-
-          reqCount++;
-          return PropertyRequest.create({
-            requestNo: `REQ-${3000 + reqCount}`,
-            property: createdProp._id,
-            property_id: createdProp._id,
-            propertyName: createdProp.name,
-            location: createdProp.location,
-            category: createdProp.type,
-            ownerName: data.ownerName || 'Admin',
-            ownerContact: data.ownerContact || 'admin',
+          return {
             room_type: roomType,
             bed_type: room.bedType || 'Double',
             price_per_room: Number(room.pricePerNight) || 0,
@@ -200,12 +185,46 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
             offers: room.offer ? [room.offer] : [],
             checkin_time: room.checkIn || '3:00 PM',
             checkout_time: room.checkOut || '12:00 PM',
-            rules: [{ title: 'Property Rules', points: room.rules ? room.rules.split('\\n') : [] }],
-            admin_status: 'approved',
-            status: 'Accepted'
-          });
+            rules: [{ title: 'Property Rules', points: room.rules ? room.rules.split('\\n') : [] }]
+          };
         });
-        await Promise.all(roomPromises);
+
+        // Auto-add room types to master if missing
+        for (const room of normalizedRooms) {
+          const existingRoomType = await RoomTypeMaster.findOne({ name: new RegExp('^' + room.room_type + '$', 'i') });
+          if (!existingRoomType) {
+            await RoomTypeMaster.create({ name: room.room_type, status: 'Active' });
+          }
+        }
+
+        const firstRoom = normalizedRooms[0];
+        const prices = normalizedRooms.map(r => Number(r.price_per_room || 0)).filter(Boolean);
+        const reqCount = await PropertyRequest.countDocuments();
+
+        await PropertyRequest.create({
+          requestNo: `REQ-${3000 + reqCount + 1}`,
+          property: createdProp._id,
+          property_id: createdProp._id,
+          propertyName: createdProp.name,
+          location: createdProp.location,
+          category: createdProp.type,
+          ownerName: data.ownerName || 'Admin',
+          ownerContact: data.ownerContact || 'admin',
+          priceByOwner: prices.length > 0 ? Math.min(...prices) : Number(firstRoom.price_per_room),
+          rooms: normalizedRooms,
+          room_type: firstRoom.room_type,
+          bed_type: firstRoom.bed_type,
+          price_per_room: firstRoom.price_per_room,
+          room_image_url: firstRoom.room_image_url,
+          room_images: firstRoom.room_images,
+          amenities_types: firstRoom.amenities_types,
+          offers: firstRoom.offers,
+          checkin_time: firstRoom.checkin_time,
+          checkout_time: firstRoom.checkout_time,
+          rules: firstRoom.rules,
+          admin_status: 'approved',
+          status: 'Accepted'
+        });
       }
     } catch (err) {
       console.error("Error syncing Property:", err.message);
@@ -298,58 +317,74 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
       const updatedProp = await Property.findByIdAndUpdate(req.params.id, updateData, { new: true });
 
       // Sync new rooms to PropertyRequest if any rooms were sent
-      // Since it's PUT, we'll delete old auto-approved rooms and recreate them to keep it simple and perfectly synced
       if (Array.isArray(data.rooms) && updatedProp) {
         const PropertyRequest = (await import('../../models/PropertyRequest.js')).default;
         
-        // Remove all old approved rooms created by admin (or just all approved rooms)
-        // Or better yet, we just add missing ones. To be safe, we'll only wipe rooms that have no image/simple stuff, 
-        // wait, wiping might delete manually added rooms. 
-        // Let's just create them if they don't exist by room name.
-        const existingRooms = await PropertyRequest.find({ property: req.params.id });
-        
-        const roomPromises = [];
-        let reqCount = await PropertyRequest.countDocuments();
-
-        for (const room of data.rooms) {
+        const normalizedRooms = data.rooms.map(room => {
           const roomType = room.roomType || 'Deluxe';
-          // Auto-add room type to master if missing
-          const existingRoomType = await RoomTypeMaster.findOne({ name: new RegExp('^' + roomType + '$', 'i') });
-          if (!existingRoomType) {
-            await RoomTypeMaster.create({ name: roomType, status: 'Active' });
-          }
+          return {
+            room_type: roomType,
+            bed_type: room.bedType || 'Double',
+            price_per_room: Number(room.pricePerNight) || 0,
+            room_image_url: room.imageUrl || '',
+            room_images: room.imageUrl ? [room.imageUrl] : [],
+            amenities_types: room.amenities || [],
+            offers: room.offer ? [room.offer] : [],
+            checkin_time: room.checkIn || '3:00 PM',
+            checkout_time: room.checkOut || '12:00 PM',
+            rules: [{ title: 'Property Rules', points: room.rules ? room.rules.split('\\n') : [] }]
+          };
+        });
 
-          // Check if it already exists
-          const exists = existingRooms.find(r => r.room_type === roomType && r.price_per_room === Number(room.pricePerNight));
-          if (!exists) {
-            reqCount++;
-            roomPromises.push(
-              PropertyRequest.create({
-                requestNo: `REQ-${3000 + reqCount}`,
-                property: updatedProp._id,
-                property_id: updatedProp._id,
-                propertyName: updatedProp.name,
-                location: updatedProp.location,
-                category: updatedProp.type,
-                ownerName: data.ownerName || 'Admin',
-                ownerContact: data.ownerContact || 'admin',
-                room_type: roomType,
-                bed_type: room.bedType || 'Double',
-                price_per_room: Number(room.pricePerNight) || 0,
-                room_image_url: room.imageUrl || '',
-                room_images: room.imageUrl ? [room.imageUrl] : [],
-                amenities_types: room.amenities || [],
-                offers: room.offer ? [room.offer] : [],
-                checkin_time: room.checkIn || '3:00 PM',
-                checkout_time: room.checkOut || '12:00 PM',
-                rules: [{ title: 'Property Rules', points: room.rules ? room.rules.split('\\n') : [] }],
-                admin_status: 'approved',
-                status: 'Accepted'
-              })
-            );
+        // Auto-add room types to master if missing
+        for (const room of normalizedRooms) {
+          const existingRoomType = await RoomTypeMaster.findOne({ name: new RegExp('^' + room.room_type + '$', 'i') });
+          if (!existingRoomType) {
+            await RoomTypeMaster.create({ name: room.room_type, status: 'Active' });
           }
         }
-        await Promise.all(roomPromises);
+
+        const firstRoom = normalizedRooms[0];
+        const prices = normalizedRooms.map(r => Number(r.price_per_room || 0)).filter(Boolean);
+
+        const existing = await PropertyRequest.findOne({ 
+          $or: [{ property: updatedProp._id }, { property_id: updatedProp._id }] 
+        });
+
+        const payload = {
+          property: updatedProp._id,
+          property_id: updatedProp._id,
+          propertyName: updatedProp.name,
+          location: updatedProp.location,
+          category: updatedProp.type,
+          ownerName: data.ownerName || 'Admin',
+          ownerContact: data.ownerContact || 'admin',
+          priceByOwner: prices.length > 0 ? Math.min(...prices) : Number(firstRoom.price_per_room),
+          rooms: normalizedRooms,
+          room_type: firstRoom.room_type,
+          bed_type: firstRoom.bed_type,
+          price_per_room: firstRoom.price_per_room,
+          room_image_url: firstRoom.room_image_url,
+          room_images: firstRoom.room_images,
+          amenities_types: firstRoom.amenities_types,
+          offers: firstRoom.offers,
+          checkin_time: firstRoom.checkin_time,
+          checkout_time: firstRoom.checkout_time,
+          rules: firstRoom.rules,
+          admin_status: 'approved',
+          status: 'Accepted'
+        };
+
+        if (existing) {
+          Object.assign(existing, payload);
+          await existing.save();
+        } else {
+          const reqCount = await PropertyRequest.countDocuments();
+          await PropertyRequest.create({
+            requestNo: `REQ-${3000 + reqCount + 1}`,
+            ...payload
+          });
+        }
       }
     } catch (err) { console.error('Property sync update error:', err.message); }
 

@@ -21,6 +21,7 @@ const normalizeEmbeddedRoom = (room) => ({
   roomName: room.roomName || room.room_type || room.roomType || '',
   imageUrl: room.imageUrl || room.room_image_url || room.img || '',
   pricePerNight: Number(room.pricePerNight ?? room.price_per_room ?? room.price ?? 0),
+  originalPrice: room.originalPrice != null ? Number(room.originalPrice) : (room.original_price != null ? Number(room.original_price) : undefined),
   maxGuests: Number(room.maxGuests ?? room.max_guests ?? room.capacity ?? 2),
   bedType: room.bedType || room.bed_type || 'Double',
   count: Number(room.count ?? 1),
@@ -49,6 +50,7 @@ const roomToRequestPayload = ({ room, property, reqUser, ownerName, ownerContact
     room_type: normalized.roomType,
     bed_type: normalized.bedType,
     price_per_room: normalized.pricePerNight,
+    original_price: normalized.originalPrice,  // SYNC original price
     room_image_url: normalized.imageUrl,
     room_images: normalized.imageUrl ? [normalized.imageUrl] : [],
     amenities_types: normalized.amenities,
@@ -69,40 +71,77 @@ const roomToRequestPayload = ({ room, property, reqUser, ownerName, ownerContact
 };
 
 const syncEmbeddedRoomsToRequests = async ({ property, rooms, reqUser, ownerName, ownerContact, isAdmin }) => {
-  if (!Array.isArray(rooms)) return;
+  if (!Array.isArray(rooms) || rooms.length === 0) return;
   const PropertyRequest = (await import('../models/PropertyRequest.js')).default;
-  let reqCount = await PropertyRequest.countDocuments();
 
-  for (const room of rooms) {
-    const payload = roomToRequestPayload({ room, property, reqUser, ownerName, ownerContact, isAdmin });
-    const requestId = room._requestId || room.requestId || room._id;
-    const query = requestId && /^[a-fA-F0-9]{24}$/.test(String(requestId))
-      ? { _id: requestId }
-      : {
-          $or: [{ property: property._id }, { property_id: property._id }],
-          room_type: payload.room_type,
-          price_per_room: payload.price_per_room
-        };
+  const normalizedRooms = rooms.map(normalizeEmbeddedRoom).map(r => ({
+    room_type: r.roomType,
+    room_image_url: r.imageUrl,
+    room_images: r.imageUrl ? [r.imageUrl] : [],
+    bed_type: r.bedType,
+    amenities_types: r.amenities,
+    original_price: r.originalPrice,
+    price_per_room: r.pricePerNight,
+    checkin_time: r.checkIn || property.checkIn,
+    checkout_time: r.checkOut || property.checkOut,
+    offers: r.offer ? [r.offer] : [],
+    rules: (() => {
+      const rulePoints = r.rules 
+        ? r.rules.split('\n').filter(Boolean) 
+        : [];
+      return rulePoints.length > 0 
+        ? [{ title: 'Property Rules', points: rulePoints }] 
+        : [];
+    })()
+  }));
 
-    const existing = await PropertyRequest.findOne(query);
-    if (existing) {
-      Object.assign(existing, payload);
-      if (!isAdmin) {
-        existing.admin_status = 'pending';
-        existing.status = 'pending';
-      }
-      await existing.save();
-    } else {
-      reqCount++;
-      await PropertyRequest.create({
-        requestNo: `REQ-${3000 + reqCount}`,
-        ...payload
-      });
-    }
+  const firstRoom = normalizedRooms[0];
+  const prices = normalizedRooms.map(r => Number(r.price_per_room || 0)).filter(Boolean);
 
+  const query = {
+    $or: [{ property: property._id }, { property_id: property._id }]
+  };
+
+  const payload = {
+    property: property._id,
+    property_id: property._id,
+    propertyName: property.name,
+    location: property.location,
+    category: property.type,
+    ownerName,
+    ownerContact,
+    priceByOwner: prices.length > 0 ? Math.min(...prices) : Number(firstRoom.price_per_room),
+    rooms: normalizedRooms,
+    room_type: firstRoom.room_type,
+    room_image_url: firstRoom.room_image_url,
+    bed_type: firstRoom.bed_type,
+    amenities_types: firstRoom.amenities_types,
+    original_price: firstRoom.original_price,
+    price_per_room: firstRoom.price_per_room,
+    checkin_time: firstRoom.checkin_time,
+    checkout_time: firstRoom.checkout_time,
+    offers: firstRoom.offers,
+    rules: firstRoom.rules,
+    admin_status: isAdmin ? 'approved' : 'pending',
+    status: isAdmin ? 'Accepted' : 'pending'
+  };
+
+  const existing = await PropertyRequest.findOne(query);
+  if (existing) {
+    Object.assign(existing, payload);
+    await existing.save();
+  } else {
+    const reqCount = await PropertyRequest.countDocuments();
+    await PropertyRequest.create({
+      requestNo: `REQ-${3000 + reqCount + 1}`,
+      ...payload
+    });
+  }
+
+  for (const room of normalizedRooms) {
     await syncRoomMasters({
-      room_type: payload.room_type,
-      amenities_types: payload.amenities_types
+      room_type: room.room_type,
+      amenities_types: room.amenities_types
     });
   }
 };

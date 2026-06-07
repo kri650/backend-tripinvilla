@@ -62,6 +62,7 @@ const roomToPropertyRoom = (room, requestId) => ({
   roomName: room.room_type || 'Deluxe Room',
   imageUrl: room.room_image_url || (Array.isArray(room.room_images) ? room.room_images[0] : ''),
   pricePerNight: Number(room.price_per_room) || 0,
+  originalPrice: room.original_price != null ? Number(room.original_price) : undefined,
   maxGuests: 2,
   bedType: room.bed_type || '',
   count: 1,
@@ -101,6 +102,18 @@ const syncAcceptedRoomToProperty = async (request) => {
 
   property.rooms = propertyRooms;
   property.status = 'Active';
+
+  // ✅ SYNC: Update property top-level price & originalPrice from rooms
+  const allRoomPrices = propertyRooms.map(r => Number(r.pricePerNight || 0)).filter(Boolean);
+  const allOriginalPrices = propertyRooms.map(r => Number(r.originalPrice || 0)).filter(Boolean);
+  if (allRoomPrices.length > 0) {
+    property.price = Math.min(...allRoomPrices);
+    property.price_per_night = Math.min(...allRoomPrices);
+  }
+  if (allOriginalPrices.length > 0) {
+    property.originalPrice = Math.max(...allOriginalPrices);
+  }
+
   await property.save();
 };
 
@@ -302,16 +315,7 @@ router.post('/admin-direct', protect, adminOnly, upload.array('images', 10), asy
     const uploadedImgs = req.files ? req.files.map(file => file.filename.startsWith('http') ? file.filename : `/uploads/${file.filename}`) : [];
     const imgs = [...existingImgs, ...uploadedImgs];
 
-    const newRoom = await PropertyRequest.create({
-      requestNo,
-      property: property_id,
-      property_id,
-      propertyName: property.name,
-      location: property.location,
-      category: property.type,
-      ownerName: property.ownerName || 'Admin',
-      ownerContact: 'admin',
-      priceByOwner: Number(price_per_room),
+    const firstRoomData = {
       room_type,
       room_image_url: imgs[0] || '',
       room_images: imgs,
@@ -321,15 +325,50 @@ router.post('/admin-direct', protect, adminOnly, upload.array('images', 10), asy
       price_per_room: Number(price_per_room),
       checkin_time,
       checkout_time,
-      offers: Array.isArray(offers) ? offers : [],
-      admin_status: 'approved',
-      status: 'Accepted'
+      offers: Array.isArray(offers) ? offers : []
+    };
+
+    const existingRequest = await PropertyRequest.findOne({
+      $or: [{ property: property_id }, { property_id: property_id }]
     });
 
-    await syncRoomMasters({ room_type, amenities_types, experiences: req.body.experiences });
-    await syncAcceptedRoomToProperty(newRoom);
+    let result;
+    if (existingRequest) {
+      const rooms = getRoomsFromRequest(existingRequest);
+      rooms.push(normalizeRoomEntry(firstRoomData));
+      
+      existingRequest.rooms = rooms;
+      // Also update top-level fields with the newest room if needed, or keep the old ones. 
+      // Usually we keep the old ones as "primary" or update to newest. Let's update to newest for direct admin action.
+      Object.assign(existingRequest, {
+        ...firstRoomData,
+        priceByOwner: Number(price_per_room),
+        admin_status: 'approved',
+        status: 'Accepted'
+      });
+      result = await existingRequest.save();
+    } else {
+      result = await PropertyRequest.create({
+        requestNo,
+        property: property_id,
+        property_id,
+        propertyName: property.name,
+        location: property.location,
+        category: property.type,
+        ownerName: property.ownerName || 'Admin',
+        ownerContact: 'admin',
+        priceByOwner: Number(price_per_room),
+        ...firstRoomData,
+        rooms: [normalizeRoomEntry(firstRoomData)],
+        admin_status: 'approved',
+        status: 'Accepted'
+      });
+    }
 
-    res.status(201).json(newRoom);
+    await syncRoomMasters({ room_type, amenities_types, experiences: req.body.experiences });
+    await syncAcceptedRoomToProperty(result);
+
+    res.status(existingRequest ? 200 : 201).json(result);
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
@@ -423,36 +462,61 @@ router.post('/', protect, ownerOnly, async (req, res) => {
       return res.status(400).json({ message: 'At least one valid room with room type and price is required' });
     }
 
-    const count = await PropertyRequest.countDocuments();
-    const requestNo = `REQ-${3000 + count + 1}`;
     const firstRoom = normalizedRooms[0];
     const prices = normalizedRooms.map(room => Number(room.price_per_room || 0)).filter(Boolean);
 
-    const newRequest = await PropertyRequest.create({
-      requestNo,
-      property: property_id,
-      property_id,
-      propertyName: property.name,
-      location: property.location,
-      category: property.type,
-      ownerName: req.user.name,
-      ownerContact: req.user.phone || req.user.email || 'N/A',
-      priceByOwner: prices.length > 0 ? Math.min(...prices) : Number(firstRoom.price_per_room),
-      rooms: normalizedRooms,
-      room_type: firstRoom.room_type,
-      room_image_url: firstRoom.room_image_url,
-      bed_type: firstRoom.bed_type,
-      amenities_types: firstRoom.amenities_types,
-      original_price: firstRoom.original_price,
-      price_per_room: firstRoom.price_per_room,
-      tax_amount: firstRoom.tax_amount,
-      checkin_time: firstRoom.checkin_time,
-      checkout_time: firstRoom.checkout_time,
-      offers: firstRoom.offers,
-      rules: firstRoom.rules,
-      admin_status: 'pending',
-      status: 'pending'
+    // ✅ Check for existing request for this property to avoid duplicates
+    const existingRequest = await PropertyRequest.findOne({
+      $or: [{ property: property_id }, { property_id: property_id }]
     });
+
+    let result;
+    if (existingRequest) {
+      existingRequest.rooms = normalizedRooms;
+      existingRequest.room_type = firstRoom.room_type;
+      existingRequest.room_image_url = firstRoom.room_image_url;
+      existingRequest.bed_type = firstRoom.bed_type;
+      existingRequest.amenities_types = firstRoom.amenities_types;
+      existingRequest.original_price = firstRoom.original_price;
+      existingRequest.price_per_room = firstRoom.price_per_room;
+      existingRequest.tax_amount = firstRoom.tax_amount;
+      existingRequest.checkin_time = firstRoom.checkin_time;
+      existingRequest.checkout_time = firstRoom.checkout_time;
+      existingRequest.offers = firstRoom.offers;
+      existingRequest.rules = firstRoom.rules;
+      existingRequest.priceByOwner = prices.length > 0 ? Math.min(...prices) : Number(firstRoom.price_per_room);
+      existingRequest.admin_status = 'pending';
+      existingRequest.status = 'pending';
+      result = await existingRequest.save();
+    } else {
+      const count = await PropertyRequest.countDocuments();
+      const requestNo = `REQ-${3000 + count + 1}`;
+      result = await PropertyRequest.create({
+        requestNo,
+        property: property_id,
+        property_id,
+        propertyName: property.name,
+        location: property.location,
+        category: property.type,
+        ownerName: req.user.name,
+        ownerContact: req.user.phone || req.user.email || 'N/A',
+        priceByOwner: prices.length > 0 ? Math.min(...prices) : Number(firstRoom.price_per_room),
+        rooms: normalizedRooms,
+        room_type: firstRoom.room_type,
+        room_image_url: firstRoom.room_image_url,
+        bed_type: firstRoom.bed_type,
+        amenities_types: firstRoom.amenities_types,
+        original_price: firstRoom.original_price,
+        price_per_room: firstRoom.price_per_room,
+        tax_amount: firstRoom.tax_amount,
+        checkin_time: firstRoom.checkin_time,
+        checkout_time: firstRoom.checkout_time,
+        offers: firstRoom.offers,
+        rules: firstRoom.rules,
+        admin_status: 'pending',
+        status: 'pending'
+      });
+    }
 
     for (const room of normalizedRooms) {
       await syncRoomMasters({
@@ -462,7 +526,7 @@ router.post('/', protect, ownerOnly, async (req, res) => {
       });
     }
 
-    res.status(201).json(newRequest);
+    res.status(existingRequest ? 200 : 201).json(result);
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
