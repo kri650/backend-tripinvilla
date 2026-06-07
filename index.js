@@ -35,6 +35,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // MongoDB Connection
 import { seedDatabase } from './utils/seeder.js';
+import { cleanupPropertyTypeDuplicates } from './utils/masterSync.js';
 
 mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/tripinvilla', {
   serverSelectionTimeoutMS: 5000,
@@ -42,6 +43,8 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/tripinvilla
 })
   .then(() => {
     console.log('✅ MongoDB connected');
+    // Auto-cleanup duplicate property types on every startup
+    cleanupPropertyTypeDuplicates().catch(err => console.error('❌ Cleanup error:', err));
     const shouldSeed =
       process.env.SEED_DB === 'true' ||
       (process.env.NODE_ENV === 'development' && process.env.SEED_DB !== 'false');

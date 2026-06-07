@@ -161,7 +161,7 @@ router.get('/', async (req, res) => {
     } else if (!status) {
       filter.status = 'Active';
     }
-    if (type) filter.type = type;
+    if (type) filter.type = { $regex: new RegExp(`^${type}$`, 'i') };
     if (city) filter.city = city;
     if (search) {
       filter.$or = [
@@ -727,7 +727,7 @@ Only include fields that are clearly mentioned. If no city but a place is mentio
     const dbFilter = { status: 'Active' };
     if (filters.city) dbFilter.city = { $regex: filters.city, $options: 'i' };
     if (filters.state) dbFilter.state = { $regex: filters.state, $options: 'i' };
-    if (filters.type) dbFilter.type = filters.type;
+    if (filters.type) dbFilter.type = { $regex: new RegExp(`^${filters.type}$`, 'i') };
     if (filters.minPrice || filters.maxPrice) {
       dbFilter.price = {};
       if (filters.minPrice) dbFilter.price.$gte = Number(filters.minPrice);
