@@ -63,6 +63,7 @@ const roomToPropertyRoom = (room, requestId) => ({
   imageUrl: room.room_image_url || (Array.isArray(room.room_images) ? room.room_images[0] : ''),
   pricePerNight: Number(room.price_per_room) || 0,
   originalPrice: room.original_price != null ? Number(room.original_price) : undefined,
+  taxAmount: room.tax_amount != null ? Number(room.tax_amount) : 0,
   maxGuests: 2,
   bedType: room.bed_type || '',
   count: 1,
