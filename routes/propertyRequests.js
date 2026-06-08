@@ -472,7 +472,21 @@ router.post('/', protect, ownerOnly, async (req, res) => {
 
     let result;
     if (existingRequest) {
-      existingRequest.rooms = normalizedRooms;
+      // Get existing rooms and merge with new rooms (append, don't replace)
+      const existingRooms = getRoomsFromRequest(existingRequest);
+      // Merge: add new rooms that don't already exist (by room_type)
+      const mergedRooms = [...existingRooms];
+      for (const newRoom of normalizedRooms) {
+        const existingIndex = mergedRooms.findIndex(r => 
+          String(r.room_type || '').toLowerCase() === String(newRoom.room_type || '').toLowerCase()
+        );
+        if (existingIndex >= 0) {
+          mergedRooms[existingIndex] = newRoom; // Update existing room
+        } else {
+          mergedRooms.push(newRoom); // Add new room
+        }
+      }
+      existingRequest.rooms = mergedRooms;
       existingRequest.room_type = firstRoom.room_type;
       existingRequest.room_image_url = firstRoom.room_image_url;
       existingRequest.bed_type = firstRoom.bed_type;
@@ -544,29 +558,59 @@ router.put('/:id', protect, ownerOnly, async (req, res) => {
     const property = await Property.findOne({ _id: request.property || request.property_id, owner: req.user._id });
     if (!property) return res.status(403).json({ message: 'Access denied' });
 
+    const updateData = {
+      room_type,
+      room_image_url,
+      bed_type,
+      amenities_types: Array.isArray(amenities_types) ? amenities_types : [],
+      original_price: original_price ? Number(original_price) : undefined,
+      price_per_room: Number(price_per_room),
+      tax_amount: tax_amount ? Number(tax_amount) : undefined,
+      priceByOwner: Number(price_per_room),
+      checkin_time,
+      checkout_time,
+      offers: Array.isArray(offers) ? offers : [],
+      rules: normalizeRuleSections(rules),
+      admin_status: 'pending',
+      status: 'pending'
+    };
+
+    if (req.body.rooms && Array.isArray(req.body.rooms)) {
+      const newRooms = req.body.rooms.map(normalizeRoomEntry);
+      const existingRooms = getRoomsFromRequest(request);
+      const mergedRooms = [...existingRooms];
+
+      for (const nr of newRooms) {
+        const idx = mergedRooms.findIndex(r => 
+          String(r.room_type || '').toLowerCase() === String(nr.room_type || '').toLowerCase()
+        );
+        if (idx >= 0) {
+          mergedRooms[idx] = { ...mergedRooms[idx], ...nr };
+        } else {
+          mergedRooms.push(nr);
+        }
+      }
+      
+      updateData.rooms = mergedRooms;
+      if (mergedRooms.length > 0) {
+        const first = mergedRooms[0];
+        Object.assign(updateData, {
+          room_type: first.room_type,
+          room_image_url: first.room_image_url,
+          bed_type: first.bed_type,
+          price_per_room: first.price_per_room,
+          original_price: first.original_price,
+          tax_amount: first.tax_amount,
+          priceByOwner: Number(first.price_per_room)
+        });
+      }
+    }
+
     const updated = await PropertyRequest.findByIdAndUpdate(
       req.params.id,
-      {
-        room_type,
-        room_image_url,
-        bed_type,
-        amenities_types: Array.isArray(amenities_types) ? amenities_types : [],
-        original_price: original_price ? Number(original_price) : undefined,
-        price_per_room: Number(price_per_room),
-        tax_amount: tax_amount ? Number(tax_amount) : undefined,
-        priceByOwner: Number(price_per_room),
-        checkin_time,
-        checkout_time,
-        offers: Array.isArray(offers) ? offers : [],
-        rules: normalizeRuleSections(rules),
-        admin_status: 'pending', // reset to pending on edit
-        status: 'pending'
-      },
+      { $set: updateData },
       { new: true }
     );
-    
-    // Update the property status to Pending since room changed
-    await Property.findByIdAndUpdate(property._id, { status: 'Pending' });
 
     await syncRoomMasters(req.body);
 

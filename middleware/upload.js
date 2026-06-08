@@ -28,11 +28,13 @@ const diskStorage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/svg+xml', 'image/webp'];
+  const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/svg+xml', 'image/webp'];
+  const allowedVideoTypes = ['video/mp4', 'video/quicktime', 'video/x-m4v', 'video/webm'];
+  const allowedTypes = [...allowedImageTypes, ...allowedVideoTypes];
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    const error = new Error('Only images (jpg, jpeg, png, svg, webp) are allowed');
+    const error = new Error('Only images (jpg, jpeg, png, svg, webp) and videos (mp4, mov, m4v, webm) are allowed');
     error.status = 400;
     cb(error, false);
   }
@@ -41,7 +43,7 @@ const fileFilter = (req, file, cb) => {
 const multerInstance = multer({
   storage: diskStorage,
   fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB
 });
 
 const uploadToCloudinary = async (filePath) => {
