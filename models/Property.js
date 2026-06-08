@@ -75,6 +75,7 @@ const propertySchema = new mongoose.Schema({
     imageUrl: { type: String },
     pricePerNight: { type: Number },
     originalPrice: { type: Number },
+    taxAmount: { type: Number },
     maxGuests: { type: Number },
     bedType: { type: String },
     count: { type: Number, default: 1 },

@@ -41,7 +41,21 @@ router.get('/', async (req, res) => {
         filter.parentLocation = req.query.city_id;
       }
     }
-    const locationsDb = await LocationMaster.find(filter).sort({ createdAt: -1 });
+    
+    // Aggregate to group by name and parent location to remove duplicates
+    const locationsDb = await LocationMaster.aggregate([
+      { $match: filter },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: { locationName: "$locationName", parentLocation: "$parentLocation" },
+          doc: { $first: "$$ROOT" }
+        }
+      },
+      { $replaceRoot: { newRoot: "$doc" } },
+      { $sort: { createdAt: -1 } }
+    ]);
+    
     res.json(locationsDb.map(mapLoc));
   } catch (err) {
     console.error('Error fetching locations:', err);
@@ -70,7 +84,21 @@ router.get('/active', async (req, res) => {
         filter.parentLocation = req.query.city_id;
       }
     }
-    const locationsDb = await LocationMaster.find(filter).sort({ locationName: 1 });
+    
+    // Aggregate to group by name and parent location to remove duplicates
+    const locationsDb = await LocationMaster.aggregate([
+      { $match: filter },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: { locationName: "$locationName", parentLocation: "$parentLocation" },
+          doc: { $first: "$$ROOT" }
+        }
+      },
+      { $replaceRoot: { newRoot: "$doc" } },
+      { $sort: { locationName: 1 } }
+    ]);
+    
     res.json(locationsDb.map(mapLoc));
   } catch (err) {
     console.error('Error fetching active locations:', err);
