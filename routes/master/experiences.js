@@ -7,10 +7,18 @@ import { upload } from '../../middleware/upload.js';
 
 const router = express.Router();
 
+const hasValidExperienceName = (value) => {
+  const name = String(value || '').trim();
+  return name && !/^\d+$/.test(name);
+};
+
 // GET active experiences for frontend tab
 router.get('/active', async (req, res) => {
   try {
-    const experiencesDb = await ExperienceMaster.find({ status: 'Active' }).sort({ experienceName: 1 });
+    const experiencesDb = await ExperienceMaster.find({
+      status: 'Active',
+      experienceName: { $exists: true, $nin: ['', null], $not: /^\d+$/ }
+    }).sort({ experienceName: 1 });
     let results = [];
 
     for (const exp of experiencesDb) {
@@ -37,7 +45,9 @@ router.get('/active', async (req, res) => {
 // GET all unique experiences with auto-calculated counts
 router.get('/', async (req, res) => {
   try {
-    const experiencesDb = await ExperienceMaster.find().sort({ experienceName: 1 });
+    const experiencesDb = await ExperienceMaster.find({
+      experienceName: { $exists: true, $nin: ['', null], $not: /^\d+$/ }
+    }).sort({ experienceName: 1 });
     let results = [];
 
     for (const exp of experiencesDb) {
@@ -68,6 +78,9 @@ router.post('/', upload.single('themeCoverImage'), async (req, res) => {
     if (req.file) {
       data.themeCoverImageUrl = req.file.filename.startsWith('http') ? req.file.filename : `/uploads/${req.file.filename}`;
     }
+    if (!hasValidExperienceName(data.experienceName)) {
+      return res.status(400).json({ message: 'Experience name must contain text, not only numbers.' });
+    }
     const newExp = await ExperienceMaster.create(data);
     res.status(201).json(newExp);
   } catch (err) {
@@ -82,6 +95,9 @@ router.put('/:id', upload.single('themeCoverImage'), async (req, res) => {
     const data = { ...req.body };
     if (req.file) {
       data.themeCoverImageUrl = req.file.filename.startsWith('http') ? req.file.filename : `/uploads/${req.file.filename}`;
+    }
+    if ('experienceName' in data && !hasValidExperienceName(data.experienceName)) {
+      return res.status(400).json({ message: 'Experience name must contain text, not only numbers.' });
     }
     const exp = await ExperienceMaster.findByIdAndUpdate(req.params.id, data, { new: true });
     if (!exp) return res.status(404).json({ message: 'Experience not found' });
