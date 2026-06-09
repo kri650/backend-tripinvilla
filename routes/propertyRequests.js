@@ -31,6 +31,20 @@ const normalizeRuleSections = (rules) => {
     .filter(rule => rule.title || rule.points.length > 0);
 };
 
+const normalizeOfferList = (room = {}) => {
+  const rawOffers = Array.isArray(room.offers)
+    ? room.offers
+    : Array.isArray(room.offersList)
+      ? room.offersList
+      : room.offer
+        ? [room.offer]
+        : [];
+
+  return rawOffers
+    .map(offer => String(offer || '').trim())
+    .filter(Boolean);
+};
+
 const normalizeRoomEntry = (room = {}) => ({
   room_type: room.room_type || '',
   room_image_url: room.room_image_url || '',
@@ -41,9 +55,9 @@ const normalizeRoomEntry = (room = {}) => ({
   original_price: room.original_price != null ? Number(room.original_price) : undefined,
   price_per_room: room.price_per_room != null ? Number(room.price_per_room) : undefined,
   tax_amount: room.tax_amount != null ? Number(room.tax_amount) : undefined,
-  checkin_time: room.checkin_time || '',
-  checkout_time: room.checkout_time || '',
-  offers: Array.isArray(room.offers) ? room.offers : [],
+  checkin_time: '',
+  checkout_time: '',
+  offers: normalizeOfferList(room),
   rules: normalizeRuleSections(room.rules)
 });
 
@@ -68,8 +82,8 @@ const roomToPropertyRoom = (room, requestId) => ({
   bedType: room.bed_type || '',
   count: 1,
   amenities: Array.isArray(room.amenities_types) ? room.amenities_types : [],
-  checkIn: room.checkin_time || '',
-  checkOut: room.checkout_time || '',
+  checkIn: '',
+  checkOut: '',
   offer: Array.isArray(room.offers) ? room.offers[0] || '' : '',
   rules: normalizeRuleSections(room.rules)
     .flatMap(rule => rule.points)
@@ -709,4 +723,3 @@ router.delete('/:id', protect, ownerOnly, async (req, res) => {
 });
 
 export default router;
-

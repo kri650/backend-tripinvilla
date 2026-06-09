@@ -9,6 +9,86 @@ import ExperienceMaster from '../../models/ExperienceMaster.js';
 
 const router = express.Router();
 
+const sanitizeObjectId = (id) => (
+  typeof id === 'string' && /^[a-fA-F0-9]{24}$/.test(id) ? id : undefined
+);
+
+const cleanLocationPart = (value) => String(value || '').trim();
+
+const uniqueLocationParts = (parts) => {
+  const seen = new Set();
+  return parts
+    .flatMap(part => cleanLocationPart(part).split(','))
+    .map(cleanLocationPart)
+    .filter(Boolean)
+    .filter(part => {
+      const key = part.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+};
+
+const composeLocationString = (data) => (
+  uniqueLocationParts([
+    data.locationName,
+    data.cityName || data.city,
+    data.stateName || data.state,
+    data.countryName || data.country
+  ]).join(', ') || cleanLocationPart(data.location)
+);
+
+const normalizePropertyData = (data, defaults = {}) => {
+  const location = composeLocationString(data) || data.location || defaults.location || 'Unknown';
+  const city = data.cityName || data.city || defaults.city || uniqueLocationParts([location])[1] || location;
+  const country = data.countryName || data.country || defaults.country || 'India';
+
+  return {
+    ...defaults,
+    name: data.propertyName || defaults.name || 'Unnamed Property',
+    type: data.propertyType || defaults.type || 'Homestay',
+    location,
+    city,
+    state: data.stateName || data.state || defaults.state,
+    country,
+    price: Number(data.propertyPrice) || Number(data.price) || defaults.price || 0,
+    price_per_night: Number(data.propertyPrice) || Number(data.price_per_night) || defaults.price_per_night || 0,
+    originalPrice: data.originalPrice ? Number(data.originalPrice) : defaults.originalPrice,
+    ownerContact: data.ownerContact || defaults.ownerContact,
+    amenities: Array.isArray(data.amenities) ? data.amenities : (Array.isArray(data.amenityTypes) ? data.amenityTypes : defaults.amenities || []),
+    description: data.aboutProperty || data.description || defaults.description,
+    images: Array.isArray(data.images) ? data.images.filter(u => u && !u.startsWith('blob:')) : defaults.images || [],
+    rooms: Array.isArray(data.rooms) ? data.rooms : defaults.rooms || [],
+    otherDetails: Array.isArray(data.otherDetails) ? data.otherDetails : defaults.otherDetails || [],
+    checkIn: data.checkIn || defaults.checkIn || '3:00 PM',
+    checkOut: data.checkOut || defaults.checkOut || '12:00 PM',
+    rules: data.rules || defaults.rules,
+    bedRooms: Number(data.bedRooms) || defaults.bedRooms || 1,
+    bathRooms: Number(data.bathRooms) || defaults.bathRooms || 1,
+    capacity: Number(data.capacity) || defaults.capacity || 2,
+    beds: Number(data.beds) || defaults.beds || 1,
+    area: data.area || defaults.area,
+    status: data.status || defaults.status || 'Active',
+    full_address: data.full_address || location,
+    highlights: data.highlights || defaults.highlights,
+    countryId: sanitizeObjectId(data.countryId),
+    countryName: data.countryName || data.country || defaults.countryName || country,
+    stateId: sanitizeObjectId(data.stateId),
+    stateName: data.stateName || data.state || defaults.stateName,
+    cityId: sanitizeObjectId(data.cityId),
+    cityName: data.cityName || data.city || defaults.cityName || city,
+    locationId: sanitizeObjectId(data.locationId),
+    locationName: data.locationName || defaults.locationName,
+    foodPreference: data.foodPreference || defaults.foodPreference || 'none',
+    roomType: data.roomType || data.stayConfig || defaults.roomType || 'entire-place',
+    landmarks: Array.isArray(data.landmarks) ? data.landmarks : defaults.landmarks || [],
+    experiences: Array.isArray(data.experiences) ? data.experiences.filter(exp => sanitizeObjectId(String(exp))) : defaults.experiences || [],
+    taxAmount: data.taxAmount ? Number(data.taxAmount) : defaults.taxAmount,
+    latitude: data.latitude ? Number(data.latitude) : defaults.latitude,
+    longitude: data.longitude ? Number(data.longitude) : defaults.longitude,
+  };
+};
+
 // GET all property master entries
 // GET /api/master/properties
 router.get('/', async (req, res) => {
@@ -35,12 +115,12 @@ router.get('/', async (req, res) => {
         amenityTypes: p.amenityTypes || [],
         amenities: linked.amenities || p.amenityTypes || [],
         location: p.location,
-        full_address: linked.full_address || p.location,
+        full_address: linked.full_address || p.full_address || p.location,
         latitude: linked.latitude,
         longitude: linked.longitude,
         propertyPrice: p.propertyPrice,
         originalPrice: p.originalPrice || linked.originalPrice,
-        taxAmount: linked.taxAmount,
+        taxAmount: linked.taxAmount || p.taxAmount,
         images: p.images || [],
         videos: p.videos || [],
         aboutProperty: p.aboutProperty,
@@ -57,17 +137,17 @@ router.get('/', async (req, res) => {
         highlights: linked.highlights,
         experiences: linked.experiences || [],
         // ── FIXED: was linked.country (wrong field) ──
-        countryId: linked.countryId,
-        stateId: linked.stateId,
-        cityId: linked.cityId,
-        locationId: linked.locationId,
-        countryName: linked.countryName || linked.country,   // ← FIXED
-        stateName: linked.stateName || linked.state,          // ← FIXED
-        cityName: linked.cityName || linked.city,             // ← FIXED
-        locationName: linked.locationName,                    // ← ADDED
+        countryId: linked.countryId || p.countryId,
+        stateId: linked.stateId || p.stateId,
+        cityId: linked.cityId || p.cityId,
+        locationId: linked.locationId || p.locationId,
+        countryName: linked.countryName || linked.country || p.countryName,
+        stateName: linked.stateName || linked.state || p.stateName,
+        cityName: linked.cityName || linked.city || p.cityName,
+        locationName: linked.locationName || p.locationName,
         // ── ADDED: these were missing from GET response ──
-        foodPreference: linked.foodPreference || 'none',      // ← ADDED
-        roomType: linked.roomType || 'entire-place',          // ← ADDED (stayConfig)
+        foodPreference: linked.foodPreference || p.foodPreference || 'none',
+        roomType: linked.roomType || p.roomType || 'entire-place',
         landmarks: p.landmarks || [],
         rooms: (linked.rooms && linked.rooms.length > 0) ? linked.rooms : (p.rooms || []),
         createdAt: p.createdAt
@@ -114,6 +194,9 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
       }
     }
 
+    data.location = composeLocationString(data) || data.location;
+    data.full_address = data.full_address || data.location;
+
     const newPropertyMaster = await PropertyMaster.create({
       propertyNo: `PM-${nextNo}`,
       ...data
@@ -158,9 +241,15 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
         full_address: data.full_address || data.location,
         highlights: data.highlights,
         countryId: data.countryId || undefined,
+        countryName: data.countryName || data.country,
         stateId: data.stateId || undefined,
+        stateName: data.stateName || data.state,
         cityId: data.cityId || undefined,
+        cityName: data.cityName || data.city,
         locationId: data.locationId || undefined,
+        locationName: data.locationName,
+        foodPreference: data.foodPreference || 'none',
+        roomType: data.roomType || data.stayConfig || 'entire-place',
         landmarks: Array.isArray(data.landmarks) ? data.landmarks : [],
         experiences: Array.isArray(data.experiences) ? data.experiences : [],
         taxAmount: data.taxAmount ? Number(data.taxAmount) : undefined,
@@ -268,6 +357,9 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
       }
     }
 
+    data.location = composeLocationString(data) || data.location;
+    data.full_address = data.full_address || data.location;
+
     const property = await PropertyMaster.findByIdAndUpdate(req.params.id, data, { new: true });
 
     // Also update the actual Property
@@ -305,9 +397,15 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
         area: data.area,
         full_address: data.full_address || data.location,
         countryId: data.countryId || undefined,
+        countryName: data.countryName || data.country,
         stateId: data.stateId || undefined,
+        stateName: data.stateName || data.state,
         cityId: data.cityId || undefined,
+        cityName: data.cityName || data.city,
         locationId: data.locationId || undefined,
+        locationName: data.locationName,
+        foodPreference: data.foodPreference,
+        roomType: data.roomType,
         landmarks: Array.isArray(data.landmarks) ? data.landmarks : undefined,
         experiences: Array.isArray(data.experiences) ? data.experiences : undefined,
         taxAmount: data.taxAmount ? Number(data.taxAmount) : undefined,
@@ -321,12 +419,34 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
 
       // Remove undefined fields
       Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
-      const updatedProp = await Property.findByIdAndUpdate(req.params.id, updateData, { new: true });
+      let updatedProp = await Property.findByIdAndUpdate(req.params.id, updateData, { new: true });
+      if (!updatedProp && property) {
+        const createData = normalizePropertyData(data, {
+          propertyNo: property.propertyNo,
+          status: 'Active'
+        });
+        if (data.owner && data.owner.toString().length === 24) {
+          createData.owner = data.owner;
+        }
+        updatedProp = await Property.create({ _id: property._id, ...createData });
+      }
+
+      const PropertyRequest = (await import('../../models/PropertyRequest.js')).default;
+      await PropertyRequest.updateMany(
+        { $or: [{ property: updatedProp._id }, { property_id: updatedProp._id }] },
+        {
+          $set: {
+            propertyName: updatedProp.name,
+            location: updatedProp.location,
+            category: updatedProp.type,
+            ownerName: data.ownerName || 'Admin',
+            ownerContact: data.ownerContact || 'admin',
+          }
+        }
+      );
 
       // Sync new rooms to PropertyRequest if any rooms were sent
       if (Array.isArray(data.rooms) && updatedProp) {
-        const PropertyRequest = (await import('../../models/PropertyRequest.js')).default;
-        
         const normalizedRooms = data.rooms.map(room => {
           const roomType = room.roomType || 'Deluxe';
           return {
@@ -344,6 +464,8 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
             rules: [{ title: 'Property Rules', points: room.rules ? room.rules.split('\\n') : [] }]
           };
         });
+
+        if (normalizedRooms.length === 0) return;
 
         // Auto-add room types to master if missing
         for (const room of normalizedRooms) {

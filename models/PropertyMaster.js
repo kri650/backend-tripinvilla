@@ -8,7 +8,18 @@ const propertyMasterSchema = new mongoose.Schema({
   ownerContact: { type: String, required: true },
   amenityTypes: [{ type: String }],
   location: { type: String, required: true },
+  full_address: { type: String },
+  countryId: { type: mongoose.Schema.Types.ObjectId },
+  countryName: { type: String },
+  stateId: { type: mongoose.Schema.Types.ObjectId },
+  stateName: { type: String },
+  cityId: { type: mongoose.Schema.Types.ObjectId },
+  cityName: { type: String },
+  locationId: { type: mongoose.Schema.Types.ObjectId },
+  locationName: { type: String },
   propertyPrice: { type: Number, required: true },
+  originalPrice: { type: Number },
+  taxAmount: { type: Number },
   images: [{ type: String }],
   videos: [{ type: String }],
   aboutProperty: { type: String },
@@ -33,6 +44,8 @@ const propertyMasterSchema = new mongoose.Schema({
     rules: { type: String }
   }],
   otherDetails: [{ title: String, text: String }],
+  foodPreference: { type: String, enum: ["veg", "non-veg", "both", "none"], default: "none" },
+  roomType: { type: String },
 }, { timestamps: true });
 
 export default mongoose.model('PropertyMaster', propertyMasterSchema);
