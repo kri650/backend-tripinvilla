@@ -118,8 +118,9 @@ const syncAcceptedRoomToProperty = async (request) => {
   await property.save();
 };
 
-const formatGuestRoom = (requestDoc, room) => ({
+const formatGuestRoom = (requestDoc, room, idx) => ({
   _id: requestDoc._id,
+  roomIndex: idx,
   title: room.room_type || 'Deluxe Room',
   img: room.room_image_url || (requestDoc.property?.images && requestDoc.property.images.length > 0 ? requestDoc.property.images[0] : 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=600&q=80'),
   images: room.room_images && room.room_images.length > 0 ? room.room_images : (room.room_image_url ? [room.room_image_url] : []),
@@ -298,7 +299,7 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
 import { upload } from '../middleware/upload.js';
 router.post('/admin-direct', protect, adminOnly, upload.array('images', 10), async (req, res) => {
   try {
-    const { property_id, room_type, room_image_url, bed_type, original_price, price_per_room, checkin_time, checkout_time } = req.body;
+    const { property_id, room_type, room_image_url, bed_type, original_price, tax_amount, price_per_room, checkin_time, checkout_time } = req.body;
     let { room_images, amenities_types, offers } = req.body;
     
     // Parse arrays if sent as strings (FormData)
@@ -323,6 +324,7 @@ router.post('/admin-direct', protect, adminOnly, upload.array('images', 10), asy
       bed_type,
       amenities_types: Array.isArray(amenities_types) ? amenities_types : [],
       original_price: original_price ? Number(original_price) : undefined,
+      tax_amount: tax_amount ? Number(tax_amount) : undefined,
       price_per_room: Number(price_per_room),
       checkin_time,
       checkout_time,
@@ -390,23 +392,65 @@ router.put('/admin-direct/:id', protect, adminOnly, upload.array('images', 10), 
     const uploadedImgs = req.files ? req.files.map(file => file.filename.startsWith('http') ? file.filename : `/uploads/${file.filename}`) : [];
     const imgs = [...existingImgs, ...uploadedImgs];
 
-    const updated = await PropertyRequest.findByIdAndUpdate(
-      req.params.id,
-      {
+    const request = await PropertyRequest.findById(req.params.id);
+    if (!request) return res.status(404).json({ message: 'Room not found' });
+    
+    let { room_index } = req.body;
+    let roomUpdated = false;
+
+    if (room_index !== undefined && room_index !== null) {
+      const idx = Number(room_index);
+      if (idx >= 0 && idx < request.rooms.length) {
+        request.rooms[idx] = {
+          ...request.rooms[idx].toObject ? request.rooms[idx].toObject() : request.rooms[idx],
+          room_type,
+          room_image_url: imgs[0] || '',
+          room_images: imgs,
+          bed_type,
+          amenities_types: Array.isArray(amenities_types) ? amenities_types : [],
+          original_price: original_price ? Number(original_price) : undefined,
+          tax_amount: req.body.tax_amount ? Number(req.body.tax_amount) : undefined,
+          price_per_room: Number(price_per_room),
+          checkin_time,
+          checkout_time,
+          offers: Array.isArray(offers) ? offers : []
+        };
+        roomUpdated = true;
+      }
+    }
+
+    if (!roomUpdated && request.rooms.length > 0) {
+      // Fallback: update first room if no index provided
+      request.rooms[0] = {
+        ...request.rooms[0].toObject ? request.rooms[0].toObject() : request.rooms[0],
         room_type,
         room_image_url: imgs[0] || '',
         room_images: imgs,
         bed_type,
         amenities_types: Array.isArray(amenities_types) ? amenities_types : [],
         original_price: original_price ? Number(original_price) : undefined,
+        tax_amount: req.body.tax_amount ? Number(req.body.tax_amount) : undefined,
         price_per_room: Number(price_per_room),
-        priceByOwner: Number(price_per_room),
         checkin_time,
         checkout_time,
-        offers: Array.isArray(offers) ? offers : [],
-      },
-      { new: true }
-    );
+        offers: Array.isArray(offers) ? offers : []
+      };
+    }
+
+    request.room_type = room_type;
+    request.room_image_url = imgs[0] || '';
+    request.room_images = imgs;
+    request.bed_type = bed_type;
+    request.amenities_types = Array.isArray(amenities_types) ? amenities_types : [];
+    request.original_price = original_price ? Number(original_price) : undefined;
+    if (req.body.tax_amount) request.tax_amount = Number(req.body.tax_amount);
+    request.price_per_room = Number(price_per_room);
+    request.priceByOwner = Number(price_per_room);
+    request.checkin_time = checkin_time;
+    request.checkout_time = checkout_time;
+    request.offers = Array.isArray(offers) ? offers : [];
+
+    const updated = await request.save();
 
     if (!updated) return res.status(404).json({ message: 'Room not found' });
     
@@ -430,7 +474,7 @@ router.get('/property/:propertyId', async (req, res) => {
       admin_status: 'approved'
     }).populate('property', 'images');
     const formatted = requests.flatMap(r =>
-      getRoomsFromRequest(r).map(room => formatGuestRoom(r, room))
+      getRoomsFromRequest(r).map((room, idx) => formatGuestRoom(r, room, idx))
     );
     res.json(formatted);
   } catch (err) {
