@@ -83,7 +83,9 @@ const propertySchema = new mongoose.Schema({
     checkIn: { type: String },
     checkOut: { type: String },
     offer: { type: String },
-    rules: { type: String }
+    rules: { type: String },
+    requestId: { type: mongoose.Schema.Types.ObjectId, ref: 'PropertyRequest' },
+    roomIndex: { type: Number }
   }],
   
   // Apartment specific

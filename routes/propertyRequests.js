@@ -71,7 +71,7 @@ const getRoomsFromRequest = (request) => {
   return [];
 };
 
-const roomToPropertyRoom = (room, requestId) => ({
+const roomToPropertyRoom = (room, requestId, roomIndex) => ({
   roomType: room.room_type || 'Deluxe Room',
   roomName: room.room_type || 'Deluxe Room',
   imageUrl: room.room_image_url || (Array.isArray(room.room_images) ? room.room_images[0] : ''),
@@ -88,7 +88,8 @@ const roomToPropertyRoom = (room, requestId) => ({
   rules: normalizeRuleSections(room.rules)
     .flatMap(rule => rule.points)
     .join('\n'),
-  requestId
+  requestId,
+  roomIndex
 });
 
 const syncAcceptedRoomToProperty = async (request) => {
@@ -103,16 +104,26 @@ const syncAcceptedRoomToProperty = async (request) => {
     ? property.rooms.map(r => (r.toObject ? r.toObject() : r))
     : [];
 
-  for (const roomData of requestRooms) {
-    const room = roomToPropertyRoom(roomData, request._id);
-    const roomIndex = propertyRooms.findIndex(existing => {
+  for (let i = 0; i < requestRooms.length; i++) {
+    const roomData = requestRooms[i];
+    const room = roomToPropertyRoom(roomData, request._id, i);
+    
+    // Find room by requestId and roomIndex for stability
+    const roomIndexInProperty = propertyRooms.findIndex(existing => {
+      if (existing.requestId && request._id && String(existing.requestId) === String(request._id) && existing.roomIndex === i) {
+        return true;
+      }
+      // Fallback for older data matching by type and price
       const sameType = String(existing.roomType || '').toLowerCase() === String(room.roomType || '').toLowerCase();
       const samePrice = Number(existing.pricePerNight || 0) === Number(room.pricePerNight || 0);
-      return sameType && samePrice;
+      return sameType && samePrice && !existing.requestId;
     });
 
-    if (roomIndex >= 0) propertyRooms[roomIndex] = { ...propertyRooms[roomIndex], ...room };
-    else propertyRooms.push(room);
+    if (roomIndexInProperty >= 0) {
+      propertyRooms[roomIndexInProperty] = { ...propertyRooms[roomIndexInProperty], ...room };
+    } else {
+      propertyRooms.push(room);
+    }
   }
 
   property.rooms = propertyRooms;
@@ -712,10 +723,34 @@ router.patch('/:id', protect, adminOnly, async (req, res) => {
 
 // DELETE request
 // DELETE /api/property-requests/:id
-router.delete('/:id', protect, ownerOnly, async (req, res) => {
+router.delete('/:id', protect, adminOnly, async (req, res) => {
   try {
-    const request = await PropertyRequest.findOneAndDelete({ _id: req.params.id });
+    const request = await PropertyRequest.findById(req.params.id);
     if (!request) return res.status(404).json({ message: 'Property request not found' });
+    
+    const propId = request.property || request.property_id;
+    
+    await PropertyRequest.findByIdAndDelete(req.params.id);
+    
+    // Remove rooms associated with this request from the property
+    if (propId) {
+      const property = await Property.findById(propId);
+      if (property && Array.isArray(property.rooms)) {
+        property.rooms = property.rooms.filter(r => 
+          !r.requestId || String(r.requestId) !== String(req.params.id)
+        );
+        
+        // Update top-level price
+        const allRoomPrices = property.rooms.map(r => Number(r.pricePerNight || 0)).filter(Boolean);
+        if (allRoomPrices.length > 0) {
+          property.price = Math.min(...allRoomPrices);
+          property.price_per_night = Math.min(...allRoomPrices);
+        }
+        
+        await property.save();
+      }
+    }
+    
     res.json({ message: 'Property request deleted successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });
