@@ -141,7 +141,7 @@ router.get('/enquiries-chart', async (req, res) => {
 router.get('/property-categories', async (req, res) => {
   try {
     const { dateFrom, dateTo } = req.query;
-    const match = {};
+    const match = { status: 'Active' };
     if (dateFrom || dateTo) {
       match.createdAt = {};
       if (dateFrom) match.createdAt.$gte = new Date(dateFrom);

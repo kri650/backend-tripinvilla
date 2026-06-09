@@ -76,6 +76,7 @@ export const syncPropertyMasters = async (propertyData) => {
     if (Array.isArray(propertyData.experiences)) {
       for (const ex of propertyData.experiences) {
         if (!ex || typeof ex !== 'string') continue;
+        if (/^[0-9a-fA-F]{24}$/.test(ex)) continue; // Skip MongoDB ObjectIds
         const exists = await ExperienceMaster.findOne({ experienceName: new RegExp(`^${ex}$`, 'i') });
         if (!exists) await ExperienceMaster.create({ experienceName: ex });
       }
@@ -106,6 +107,7 @@ export const syncRoomMasters = async (roomData) => {
     if (Array.isArray(roomData.experiences)) {
       for (const ex of roomData.experiences) {
         if (!ex || typeof ex !== 'string') continue;
+        if (/^[0-9a-fA-F]{24}$/.test(ex)) continue; // Skip MongoDB ObjectIds
         const exists = await ExperienceMaster.findOne({ experienceName: new RegExp(`^${ex}$`, 'i') });
         if (!exists) await ExperienceMaster.create({ experienceName: ex });
       }

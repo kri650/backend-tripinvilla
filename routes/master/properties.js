@@ -183,6 +183,8 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
             room_images: room.imageUrl ? [room.imageUrl] : [],
             amenities_types: room.amenities || [],
             offers: room.offer ? [room.offer] : [],
+            original_price: room.originalPrice ? Number(room.originalPrice) : undefined,
+            tax_amount: room.taxAmount ? Number(room.taxAmount) : undefined,
             checkin_time: room.checkIn || '3:00 PM',
             checkout_time: room.checkOut || '12:00 PM',
             rules: [{ title: 'Property Rules', points: room.rules ? room.rules.split('\\n') : [] }]
@@ -330,6 +332,8 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
             room_images: room.imageUrl ? [room.imageUrl] : [],
             amenities_types: room.amenities || [],
             offers: room.offer ? [room.offer] : [],
+            original_price: room.originalPrice ? Number(room.originalPrice) : undefined,
+            tax_amount: room.taxAmount ? Number(room.taxAmount) : undefined,
             checkin_time: room.checkIn || '3:00 PM',
             checkout_time: room.checkOut || '12:00 PM',
             rules: [{ title: 'Property Rules', points: room.rules ? room.rules.split('\\n') : [] }]
@@ -364,6 +368,8 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
           room_type: firstRoom.room_type,
           bed_type: firstRoom.bed_type,
           price_per_room: firstRoom.price_per_room,
+          original_price: firstRoom.original_price,
+          tax_amount: firstRoom.tax_amount,
           room_image_url: firstRoom.room_image_url,
           room_images: firstRoom.room_images,
           amenities_types: firstRoom.amenities_types,
