@@ -56,13 +56,18 @@ router.get('/', async (req, res) => {
         otherDetails: linked.otherDetails || p.otherDetails || [],
         highlights: linked.highlights,
         experiences: linked.experiences || [],
+        // ── FIXED: was linked.country (wrong field) ──
         countryId: linked.countryId,
         stateId: linked.stateId,
         cityId: linked.cityId,
         locationId: linked.locationId,
-        countryName: linked.country,
-        stateName: linked.state,
-        cityName: linked.city,
+        countryName: linked.countryName || linked.country,   // ← FIXED
+        stateName: linked.stateName || linked.state,          // ← FIXED
+        cityName: linked.cityName || linked.city,             // ← FIXED
+        locationName: linked.locationName,                    // ← ADDED
+        // ── ADDED: these were missing from GET response ──
+        foodPreference: linked.foodPreference || 'none',      // ← ADDED
+        roomType: linked.roomType || 'entire-place',          // ← ADDED (stayConfig)
         landmarks: p.landmarks || [],
         rooms: (linked.rooms && linked.rooms.length > 0) ? linked.rooms : (p.rooms || []),
         createdAt: p.createdAt
