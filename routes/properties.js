@@ -250,7 +250,7 @@ router.get('/', async (req, res) => {
       .skip((Number(page) - 1) * Number(limit))
       .sort({ priority: -1, hasActiveOffer: -1, createdAt: -1 })
       .populate('experiences')
-      .populate('owner', 'name phone email');
+      .populate('owner', 'name phone email role isPremium subscription plan');
 
     const total = await Property.countDocuments(filter);
 
