@@ -465,7 +465,9 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
           };
         });
 
-        if (normalizedRooms.length === 0) return;
+        if (normalizedRooms.length === 0) {
+          // skip room sync but do NOT return early from the route handler
+        } else {
 
         // Auto-add room types to master if missing
         for (const room of normalizedRooms) {
@@ -518,6 +520,7 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
             ...payload
           });
         }
+        } // close else (normalizedRooms.length > 0)
       }
     } catch (err) { console.error('Property sync update error:', err.message); }
 
