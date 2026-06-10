@@ -647,23 +647,10 @@ router.put('/:id', protect, ownerOnly, async (req, res) => {
 
     if (req.body.rooms && Array.isArray(req.body.rooms)) {
       const newRooms = req.body.rooms.map(normalizeRoomEntry);
-      const existingRooms = getRoomsFromRequest(request);
-      const mergedRooms = [...existingRooms];
+      updateData.rooms = newRooms;
 
-      for (const nr of newRooms) {
-        const idx = mergedRooms.findIndex(r => 
-          String(r.room_type || '').toLowerCase() === String(nr.room_type || '').toLowerCase()
-        );
-        if (idx >= 0) {
-          mergedRooms[idx] = { ...mergedRooms[idx], ...nr };
-        } else {
-          mergedRooms.push(nr);
-        }
-      }
-      
-      updateData.rooms = mergedRooms;
-      if (mergedRooms.length > 0) {
-        const first = mergedRooms[0];
+      if (newRooms.length > 0) {
+        const first = newRooms[0];
         Object.assign(updateData, {
           room_type: first.room_type,
           room_image_url: first.room_image_url,
