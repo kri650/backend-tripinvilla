@@ -475,6 +475,7 @@ router.put('/admin-direct/:id', protect, adminOnly, upload.array('images', 10), 
     request.checkout_time = checkout_time;
     request.offers = Array.isArray(offers) ? offers : [];
 
+    request.markModified('rooms');
     const updated = await request.save();
 
     if (!updated) return res.status(404).json({ message: 'Room not found' });
