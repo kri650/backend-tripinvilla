@@ -17,7 +17,12 @@ router.get('/active', async (req, res) => {
   try {
     const experiencesDb = await ExperienceMaster.find({
       status: 'Active',
-      experienceName: { $exists: true, $nin: ['', null], $not: /^\d+$/ }
+      experienceName: { 
+        $exists: true, 
+        $nin: ['', null], 
+        $not: /^\d+$/,
+        $not: /^[0-9a-fA-F]{24}$/
+      }
     }).sort({ experienceName: 1 });
     let results = [];
 
@@ -46,7 +51,12 @@ router.get('/active', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const experiencesDb = await ExperienceMaster.find({
-      experienceName: { $exists: true, $nin: ['', null], $not: /^\d+$/ }
+      experienceName: { 
+        $exists: true, 
+        $nin: ['', null], 
+        $not: /^\d+$/,
+        $not: /^[0-9a-fA-F]{24}$/
+      }
     }).sort({ experienceName: 1 });
     let results = [];
 

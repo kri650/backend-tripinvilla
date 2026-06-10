@@ -75,10 +75,11 @@ export const syncPropertyMasters = async (propertyData) => {
     // 7. Experiences
     if (Array.isArray(propertyData.experiences)) {
       for (const ex of propertyData.experiences) {
-        if (!ex || typeof ex !== 'string') continue;
-        if (/^[0-9a-fA-F]{24}$/.test(ex)) continue; // Skip MongoDB ObjectIds
-        const exists = await ExperienceMaster.findOne({ experienceName: new RegExp(`^${ex}$`, 'i') });
-        if (!exists) await ExperienceMaster.create({ experienceName: ex });
+        if (!ex) continue;
+        const exStr = String(ex).trim();
+        if (!exStr || /^[0-9a-fA-F]{24}$/.test(exStr)) continue; // Robust skip for MongoDB ObjectIds
+        const exists = await ExperienceMaster.findOne({ experienceName: new RegExp(`^${exStr}$`, 'i') });
+        if (!exists) await ExperienceMaster.create({ experienceName: exStr });
       }
     }
   } catch (err) {
