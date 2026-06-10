@@ -237,7 +237,7 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
         try { data[field] = JSON.parse(data[field]); } catch (e) { }
       }
     };
-    ['amenityTypes', 'amenities', 'experiences', 'rooms', 'landmarks', 'highlights', 'images', 'videos', 'otherDetails'].forEach(parseIfString);
+    ['amenityTypes', 'amenities', 'experiences', 'rooms', 'landmarks', 'highlights', 'images', 'videos', 'otherDetails', 'activities', 'societyAmenities'].forEach(parseIfString);
 
     if (req.files) {
       if (req.files['images']) {
@@ -428,7 +428,7 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
         try { data[field] = JSON.parse(data[field]); } catch (e) { }
       }
     };
-    ['amenityTypes', 'amenities', 'experiences', 'rooms', 'landmarks', 'highlights', 'images', 'videos', 'otherDetails'].forEach(parseIfString);
+    ['amenityTypes', 'amenities', 'experiences', 'rooms', 'landmarks', 'highlights', 'images', 'videos', 'otherDetails', 'activities', 'societyAmenities'].forEach(parseIfString);
 
     if (req.files) {
       if (req.files['images']) {
