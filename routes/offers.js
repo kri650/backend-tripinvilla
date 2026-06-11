@@ -205,8 +205,15 @@ router.post('/', protect, ownerOnly, async (req, res) => {
     const priceVal = approvedRequest?.price_per_room || property.price || 0;
     const requestIdVal = approvedRequest?._id || null;
 
-    const count = await Offer.countDocuments();
-    const offerId = `OFF-${7000 + count + 1}`;
+    const lastOffer = await Offer.findOne().sort({ offerId: -1 });
+    let nextNum = 7001;
+    if (lastOffer && lastOffer.offerId && lastOffer.offerId.startsWith('OFF-')) {
+      const lastNum = parseInt(lastOffer.offerId.replace('OFF-', ''), 10);
+      if (!isNaN(lastNum)) {
+        nextNum = lastNum + 1;
+      }
+    }
+    const offerId = `OFF-${nextNum}`;
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -254,6 +261,18 @@ router.delete('/:id', protect, ownerOnly, async (req, res) => {
   try {
     const offer = await Offer.findOneAndDelete({ _id: req.params.id });
     if (!offer) return res.status(404).json({ message: 'Offer not found' });
+    
+    // Check if property has any other offers
+    const propId = offer.property_id || offer.propertyId;
+    if (propId) {
+      const remainingOffersCount = await Offer.countDocuments({ 
+        $or: [{ property_id: propId }, { propertyId: propId }] 
+      });
+      if (remainingOffersCount === 0) {
+        await Property.findByIdAndUpdate(propId, { hasActiveOffer: false });
+      }
+    }
+
     res.json({ message: 'Offer deleted successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });
