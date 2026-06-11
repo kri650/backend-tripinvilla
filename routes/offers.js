@@ -104,7 +104,7 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
     );
 
     const offers = await Offer.find({ property_id: { $in: propertyIds } })
-      .populate('property_id', 'name location city type')
+      .populate('property_id', 'name location city type foodPreference')
       .sort({ createdAt: -1 });
 
     const formatted = offers.map(o => {
@@ -142,7 +142,7 @@ router.get('/', async (req, res) => {
     );
 
     const offers = await Offer.find()
-      .populate('property_id', 'name location city type')
+      .populate('property_id', 'name location city type foodPreference')
       .sort({ createdAt: -1 });
 
     const formatted = offers.map(o => {

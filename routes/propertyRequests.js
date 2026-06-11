@@ -205,7 +205,7 @@ const formatAdminRequest = (r) => {
 router.get('/', protect, adminOnly, async (req, res) => {
   try {
     const requestsDb = await PropertyRequest.find()
-      .populate('property', 'name location city type description images')
+      .populate('property', 'name location city type description images foodPreference')
       .sort({ createdAt: -1 });
 
     const [totalProperties, pendingRequests, rejectedRequests] = await Promise.all([
@@ -284,7 +284,7 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
         { property_id: { $in: propertyIds } }
       ]
     })
-      .populate('property', 'name location city type images')
+      .populate('property', 'name location city type images foodPreference')
       .sort({ createdAt: -1 });
       
     const formatted = requests.map(r => {
