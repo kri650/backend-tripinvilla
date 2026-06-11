@@ -7,14 +7,22 @@ import { protect, ownerOnly } from '../middleware/auth.js';
 const router = express.Router();
 
 const formatOfferDateTime = (offer) => {
-  const offerDate = offer.offer_date || offer.dateFrom;
-  if (!offerDate) return offer.offer_time || 'N/A';
-  const dateFormatted = new Date(offerDate).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric'
-  });
-  return `${dateFormatted}${offer.offer_time ? `\n${offer.offer_time}` : ''}`;
+  const from = offer.dateFrom || offer.offer_date;
+  const to = offer.dateTo || offer.offer_date;
+  
+  if (!from) return offer.offer_time || 'N/A';
+  
+  const fromFormatted = new Date(from).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  let dateFormatted = fromFormatted;
+  
+  if (to && new Date(to).getTime() !== new Date(from).getTime()) {
+    const toFormatted = new Date(to).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    if (fromFormatted !== toFormatted) {
+      dateFormatted = `${fromFormatted} to ${toFormatted}`;
+    }
+  }
+  
+  return `${dateFormatted}${offer.offer_time ? ` at ${offer.offer_time}` : ''}`;
 };
 
 // GET all active offers for frontend
@@ -163,7 +171,7 @@ router.get('/', async (req, res) => {
 // POST /api/offers
 router.post('/', protect, ownerOnly, async (req, res) => {
   try {
-    const { property_id, request_id, room_type, food_type, offer_date, offer_time, offer_percent, description, amenities } = req.body;
+    const { property_id, request_id, room_type, food_type, offer_date, dateFrom, dateTo, offer_time, offer_percent, description, amenities } = req.body;
 
         let property = await Property.findById(property_id);
     if (!property) {
@@ -239,8 +247,8 @@ router.post('/', protect, ownerOnly, async (req, res) => {
       propertyId: property_id,
       propertyName: property.name,
       location: property.location,
-      dateFrom: offerDateObj,
-      dateTo: offerDateObj,
+      dateFrom: dateFrom ? new Date(dateFrom) : offerDateObj,
+      dateTo: dateTo ? new Date(dateTo) : offerDateObj,
       room: roomTypeVal,
       foods: food_type,
       offerPercent: parseFloat(offer_percent) || 0
@@ -295,7 +303,7 @@ router.get('/:id', async (req, res) => {
 // PUT /api/offers/:id
 router.put('/:id', protect, ownerOnly, async (req, res) => {
   try {
-    const { property_id, request_id, room_type, food_type, offer_date, offer_time, offer_percent, description, status, amenities } = req.body;
+    const { property_id, request_id, room_type, food_type, offer_date, dateFrom, dateTo, offer_time, offer_percent, description, status, amenities } = req.body;
     
     const offerDateObj = new Date(offer_date);
     
@@ -309,8 +317,8 @@ router.put('/:id', protect, ownerOnly, async (req, res) => {
       offer_percent,
       description,
       status,
-      dateFrom: offerDateObj,
-      dateTo: offerDateObj,
+      dateFrom: dateFrom ? new Date(dateFrom) : offerDateObj,
+      dateTo: dateTo ? new Date(dateTo) : offerDateObj,
       foods: food_type,
       offerPercent: parseFloat(offer_percent) || 0
     };
