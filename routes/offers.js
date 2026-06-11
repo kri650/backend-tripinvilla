@@ -49,7 +49,7 @@ router.get('/frontend', async (req, res) => {
           select: 'role isPremium subscription'
         }
       })
-      .sort({ offer_date: 1 });
+      .sort({ createdAt: -1 });
 
     let formatted = offers.map(o => {
       const obj = o.toObject();
