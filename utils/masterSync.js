@@ -46,7 +46,37 @@ export const syncPropertyMasters = async (propertyData) => {
     // 3. Location
     if (propertyData.location && typeof propertyData.location === 'string') {
       const loc = await LocationMaster.findOne({ locationName: new RegExp(`^${propertyData.location}$`, 'i') });
-      if (!loc) await LocationMaster.create({ locationName: propertyData.location, locationType: 'Area' });
+      const mappedLandmarks = Array.isArray(propertyData.landmarks) 
+        ? propertyData.landmarks.map(lm => ({
+            name: lm.landmark_name || lm.name || 'Unknown Landmark',
+            popularity: lm.landmark_type || lm.type || 'Tourist Popular',
+            images: lm.landmark_image_url || lm.image || lm.img ? [lm.landmark_image_url || lm.image || lm.img] : []
+          }))
+        : [];
+
+      if (!loc) {
+        await LocationMaster.create({ 
+          locationName: propertyData.location, 
+          locationType: 'Area',
+          landmarks: mappedLandmarks
+        });
+      } else if (mappedLandmarks.length > 0) {
+        // Append new landmarks that don't already exist in the location by name
+        let modified = false;
+        const existingNames = loc.landmarks.map(l => (l.name || '').toLowerCase());
+        
+        for (const newLm of mappedLandmarks) {
+          if (!existingNames.includes(newLm.name.toLowerCase())) {
+            loc.landmarks.push(newLm);
+            existingNames.push(newLm.name.toLowerCase());
+            modified = true;
+          }
+        }
+        
+        if (modified) {
+          await loc.save();
+        }
+      }
     }
 
     // 4. State

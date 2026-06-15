@@ -253,6 +253,20 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
     data.location = composeLocationString(data) || data.location;
     data.full_address = data.full_address || data.location;
 
+    // Map manual location inputs to fields expected by syncPropertyMasters
+    if (data.countryName && !data.country) data.country = data.countryName;
+    if (data.stateName && !data.state) data.state = data.stateName;
+    if (data.cityName && !data.city) data.city = data.cityName;
+    if (data.locationName && !data.location) data.location = data.locationName;
+
+    // Sync to Master Collections (Country, State, City, Area)
+    try {
+      const { syncPropertyMasters } = await import('../../utils/masterSync.js');
+      await syncPropertyMasters(data);
+    } catch (e) {
+      console.error('Error syncing masters from Admin:', e);
+    }
+
     const newPropertyMaster = await PropertyMaster.create({
       propertyNo: `PM-${nextNo}`,
       ...data
@@ -443,6 +457,20 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
 
     data.location = composeLocationString(data) || data.location;
     data.full_address = data.full_address || data.location;
+
+    // Map manual location inputs to fields expected by syncPropertyMasters
+    if (data.countryName && !data.country) data.country = data.countryName;
+    if (data.stateName && !data.state) data.state = data.stateName;
+    if (data.cityName && !data.city) data.city = data.cityName;
+    if (data.locationName && !data.location) data.location = data.locationName;
+
+    // Sync to Master Collections (Country, State, City, Area)
+    try {
+      const { syncPropertyMasters } = await import('../../utils/masterSync.js');
+      await syncPropertyMasters(data);
+    } catch (e) {
+      console.error('Error syncing masters from Admin PUT:', e);
+    }
 
     const property = await PropertyMaster.findByIdAndUpdate(req.params.id, data, { new: true });
 

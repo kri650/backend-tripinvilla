@@ -504,6 +504,12 @@ router.post('/', protect, ownerOnly, async (req, res) => {
     if (body.bedrooms !== undefined) body.bedRooms = Number(body.bedrooms);
     if (body.address !== undefined) body.location = body.address;
     
+    // Map manual location inputs to fields expected by syncPropertyMasters
+    if (body.countryName && !body.country) body.country = body.countryName;
+    if (body.stateName && !body.state) body.state = body.stateName;
+    if (body.cityName && !body.city) body.city = body.cityName;
+    if (body.locationName && !body.location) body.location = body.locationName;
+    
     const sanitizeObjId = (id) => (typeof id === 'string' && /^[a-fA-F0-9]{24}$/.test(id)) ? id : undefined;
     if ('countryId' in body) body.countryId = sanitizeObjId(body.countryId);
     if ('stateId' in body) body.stateId = sanitizeObjId(body.stateId);
@@ -606,6 +612,12 @@ router.put('/:id', protect, ownerOnly, async (req, res) => {
     if (body.price_per_night !== undefined) body.price = Number(body.price_per_night);
     if (body.bedrooms !== undefined) body.bedRooms = Number(body.bedrooms);
     if (body.address !== undefined) body.location = body.address;
+
+    // Map manual location inputs to fields expected by syncPropertyMasters
+    if (body.countryName && !body.country) body.country = body.countryName;
+    if (body.stateName && !body.state) body.state = body.stateName;
+    if (body.cityName && !body.city) body.city = body.cityName;
+    if (body.locationName && !body.location) body.location = body.locationName;
 
     const sanitizeObjId = (id) => (typeof id === 'string' && /^[a-fA-F0-9]{24}$/.test(id)) ? id : undefined;
     if ('countryId' in body) body.countryId = sanitizeObjId(body.countryId);
