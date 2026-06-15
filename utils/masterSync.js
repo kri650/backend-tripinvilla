@@ -90,7 +90,7 @@ export const syncPropertyMasters = async (propertyData) => {
     if (propertyData.country && typeof propertyData.country === 'string') {
       const normalizedCountry = toTitleCaseWords(propertyData.country);
       const country = await CountryMaster.findOne({ countryName: new RegExp(`^${normalizedCountry}$`, 'i') });
-      if (!country) await CountryMaster.create({ countryName: normalizedCountry, dialCode: '+91', currencyCode: 'INR', currencySymbol: '₹' });
+      if (!country) await CountryMaster.create({ countryName: normalizedCountry, dialCode: '-', currencyCode: '-', currencySymbol: '-' });
     }
 
     // 6. Amenities
