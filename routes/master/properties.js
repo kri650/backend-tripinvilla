@@ -391,7 +391,7 @@ router.post('/', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'video
           }
         }
 
-        const firstRoom = normalizedRooms[0];
+        const firstRoom = normalizedRooms[0] || {};
         const prices = normalizedRooms.map(r => Number(r.price_per_room || 0)).filter(Boolean);
         const reqCount = await PropertyRequest.countDocuments();
 
@@ -617,7 +617,7 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
           }
         }
 
-        const firstRoom = normalizedRooms[0];
+        const firstRoom = normalizedRooms[0] || {};
         const prices = normalizedRooms.map(r => Number(r.price_per_room || 0)).filter(Boolean);
 
         const existing = await PropertyRequest.findOne({ 
