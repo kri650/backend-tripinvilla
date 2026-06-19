@@ -672,14 +672,51 @@ router.put('/:id', upload.fields([{ name: 'images', maxCount: 30 }, { name: 'vid
   }
 });
 
-// DELETE property master
-// DELETE /api/master/properties/:id
 router.delete('/:id', async (req, res) => {
   try {
-    await PropertyMaster.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Property master deleted successfully' });
+    const propertyId = req.params.id;
+
+    // 1. Delete from PropertyMaster
+    await PropertyMaster.findByIdAndDelete(propertyId);
+
+    // 2. Delete from Property
+    await Property.findByIdAndDelete(propertyId);
+
+    // 3. Delete from PropertyRequest
+    try {
+      const PropertyRequest = (await import('../../models/PropertyRequest.js')).default;
+      await PropertyRequest.deleteMany({ $or: [{ property: propertyId }, { property_id: propertyId }] });
+    } catch (e) {
+      console.error('Error deleting property requests:', e);
+    }
+
+    // 4. Delete from PropertyExperienceTag
+    try {
+      await PropertyExperienceTag.deleteMany({ propertyId: propertyId });
+    } catch (e) {
+      console.error('Error deleting property experience tags:', e);
+    }
+
+    // 5. Delete from PropertyLandmark
+    try {
+      const PropertyLandmark = (await import('../../models/PropertyLandmark.js')).default;
+      await PropertyLandmark.deleteMany({ property_id: propertyId });
+    } catch (e) {
+      console.error('Error deleting property landmarks:', e);
+    }
+
+    // 6. Delete from PropertyReview
+    try {
+      const PropertyReview = (await import('../../models/PropertyReview.js')).default;
+      await PropertyReview.deleteMany({ property_id: propertyId });
+    } catch (e) {
+      console.error('Error deleting property reviews:', e);
+    }
+
+    res.json({ message: 'Property master and all associated data deleted successfully' });
   } catch (err) {
-    res.json({ message: 'Property master deleted successfully' });
+    console.error('Error deleting property:', err);
+    res.status(500).json({ message: 'Failed to delete property from all collections' });
   }
 });
 

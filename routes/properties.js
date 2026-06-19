@@ -304,13 +304,12 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET recommended properties (Admins or Subscribed Owners)
+// GET recommended properties (Premium/Paid Owners only)
 router.get('/recommended', async (req, res) => {
   try {
     const { default: User } = await import('../models/User.js');
     const eligibleUsers = await User.find({
       $or: [
-        { role: { $in: ['admin', 'super_admin'] } },
         { isPremium: true },
         { 'subscription.isActive': true }
       ]
@@ -320,7 +319,7 @@ router.get('/recommended', async (req, res) => {
 
     const properties = await Property.find({ owner: { $in: eligibleUserIds }, status: 'Active' })
       .populate('owner', 'name phone email role isPremium subscription')
-      .limit(20)
+      .limit(100)
       .sort({ priority: -1, createdAt: -1 });
 
     const formatted = properties.map((p, index) => {
@@ -710,9 +709,41 @@ router.delete('/:id', protect, ownerOnly, async (req, res) => {
     const property = await Property.findOneAndDelete(query);
     if (!property) return res.status(404).json({ message: 'Property not found or access denied' });
     
-    // Also delete any associated property requests!
-    await PropertyRequest.deleteMany({ property: req.params.id });
-    await PropertyLandmark.deleteMany({ property_id: req.params.id });
+    const propertyId = req.params.id;
+
+    // Delete associated property requests
+    await PropertyRequest.deleteMany({ $or: [{ property: propertyId }, { property_id: propertyId }] });
+    
+    // Delete landmarks
+    await PropertyLandmark.deleteMany({ property_id: propertyId });
+    
+    // Delete property master
+    try {
+      const { default: PropertyMaster } = await import('../models/PropertyMaster.js');
+      if (isAdmin) {
+        await PropertyMaster.findByIdAndDelete(propertyId);
+      } else {
+        await PropertyMaster.findOneAndDelete({ _id: propertyId, owner: req.user._id });
+      }
+    } catch (e) {
+      console.error('Error deleting property master:', e);
+    }
+
+    // Delete experience tags
+    try {
+      const { default: PropertyExperienceTag } = await import('../models/PropertyExperienceTag.js');
+      await PropertyExperienceTag.deleteMany({ propertyId: propertyId });
+    } catch (e) {
+      console.error('Error deleting property experience tags:', e);
+    }
+
+    // Delete reviews
+    try {
+      const { default: PropertyReview } = await import('../models/PropertyReview.js');
+      await PropertyReview.deleteMany({ property_id: propertyId });
+    } catch (e) {
+      console.error('Error deleting property reviews:', e);
+    }
     
     res.json({ message: 'Property deleted' });
   } catch (err) {
